@@ -1,57 +1,90 @@
-# Job Scheduler V1
+# Java Job Scheduler (V1)
 
-## What the project is
-A lightweight, understandable Java 17 job scheduler learning project that demonstrates core scheduling concepts using standard Java libraries, without heavy frameworks.
+## Project Overview
+A lightweight, in-memory Java 17 job scheduler designed to demonstrate core engineering concepts including clean architecture, time-dependent unit testing, and fundamental scheduling algorithms without relying on heavy enterprise frameworks.
 
 ## V1 Scope
-This is Version 1 of the job scheduler. Its purpose is to demonstrate:
-- Basic job structure with scheduled execution times.
-- Scheduling jobs using a `PriorityQueue`.
-- Sequential execution based on schedule time.
-- Unit testing time-dependent code.
+Version 1 is an intentional foundational release. It establishes the core domain model and a functional priority-based scheduling loop. It executes strictly sequentially on a single thread and holds all state in memory.
 
-## Architecture
-The project follows a simple layered structure:
-- `com.siva.jobscheduler.domain`: Contains immutable domain models (`Job` record) and behavior contracts (`JobTask`).
-- `com.siva.jobscheduler.scheduler`: Contains the `JobScheduler` responsible for the scheduling algorithm.
-- `com.siva.jobscheduler`: Contains the `JobSchedulerApplication` entry point.
+## Architecture & Core Components
+The project is built on a clean, layered architecture:
+- **`domain.Job`**: An immutable Java 17 record representing the scheduled entity.
+- **`domain.JobTask`**: A functional interface representing the executable workload.
+- **`scheduler.JobScheduler`**: The execution engine that evaluates and dispatches due jobs.
 
-## Why PriorityQueue is used
-A `PriorityQueue` is an ideal data structure for scheduling because it naturally orders elements based on their priority. By making `Job` implement `Comparable<Job>` (ordering by `scheduledAt`), the priority queue ensures that the earliest scheduled job is always at the head of the queue (`peek()`), providing O(log n) insertion and O(1) retrieval of the next due job.
+## Scheduling Model & PriorityQueue Rationale
+The scheduler operates using a **PriorityQueue**. Because `Job` implements `Comparable<Job>` (sorting by absolute scheduled time), the queue guarantees the earliest job is always at the head. 
 
-## Scheduling Flow
-1. Jobs are registered and added to the `PriorityQueue`.
-2. The scheduler loops while the queue is not empty.
-3. It checks the next due job (`peek()`).
-4. If the job's scheduled time is in the past or now, it is removed (`poll()`) and executed.
-5. If the job's scheduled time is in the future, the scheduler waits (`Thread.sleep()`) until it becomes due.
+**Complexity Characteristics:**
+- **Insert (`offer`)**: O(log n)
+- **Inspect Next (`peek`)**: O(1)
+- **Extract Next (`poll`)**: O(log n)
 
-## Why execution is sequential in V1
-V1 intentionally avoids thread pools and concurrency frameworks to keep the scheduling algorithm clear and understandable. Sequential execution ensures that we can easily trace the flow of execution and verify the core logic before introducing the complexities of concurrent state management.
+This makes the algorithm highly efficient for dynamic registration and sequential extraction.
 
-## How Time is Handled and JUnit is used
-To make the scheduler testable without slow `Thread.sleep` calls in every test, it depends on a `java.time.Clock`. In production, `Clock.systemUTC()` is used. In tests, a fixed clock (`Clock.fixed(...)`) is passed to the scheduler, allowing tests to instantly verify behavior at specific points in time. 
+## Time Handling & Execution Model
+Execution is purely sequential. The scheduler peeks at the next job; if the job is due, it executes it synchronously. If the job is scheduled in the future, the scheduler suspends execution using `Thread.sleep()` until the precise moment the job is due.
 
-The project uses JUnit 5 for testing. Tests cover job creation, property validation, priority ordering, empty queue handling, and execution order.
+To ensure deterministic behavior and testability, time is evaluated through an injected `java.time.Clock`. In production, this uses `Clock.systemUTC()`, while unit tests can utilize `Clock.fixed(...)` to manipulate time seamlessly without requiring actual thread sleep delays in most scenarios.
 
-## How to run tests
+## Project Structure
+```text
+com.siva.jobscheduler
+├── domain
+│   ├── Job.java
+│   └── JobTask.java
+├── scheduler
+│   └── JobScheduler.java
+└── JobSchedulerApplication.java
+```
+
+## Technology Stack
+- **Language**: Java 17
+- **Build Tool**: Gradle 9.7.1
+- **Testing**: JUnit 5 (Jupiter)
+
+## Build and Run Instructions
+
+**To run the test suite:**
 ```bash
 ./gradlew test
 ```
 
-## How to run the application
+**To build the project:**
+```bash
+./gradlew build
+```
+
+**To execute the demonstration application:**
 ```bash
 ./gradlew run
 ```
 
-## Known Limitations
-- V1 is strictly sequential. If a job takes a long time to execute, it will delay all subsequent jobs.
-- The scheduler cannot be interrupted gracefully during execution.
-- No persistence; all jobs are held in memory and lost if the application stops.
-- No recurring jobs (cron) or retry logic.
+## Example Output
+```text
+Registered job: job-001
+Registered job: job-002
+Registered job: job-003
 
-## What future versions may introduce
-- Worker threads / `ExecutorService` for concurrent job execution.
-- Persistence mechanisms (e.g., database) to survive restarts.
-- Recurring jobs and cron expression support.
-- Retry logic for failed jobs.
+Scheduler started.
+
+[2026-09-11T00:00:00Z] STARTED job-002
+[2026-09-11T00:00:00Z] COMPLETED job-002
+[2026-09-11T00:00:01Z] STARTED job-001
+[2026-09-11T00:00:01Z] COMPLETED job-001
+[2026-09-11T00:00:02Z] STARTED job-003
+[2026-09-11T00:00:02Z] COMPLETED job-003
+
+All jobs completed.
+Scheduler stopped.
+```
+
+## Engineering Decisions
+For detailed architectural choices, please review the documentation in the `/docs` directory.
+- `docs/architecture/architecture.md`
+- `docs/versions/v1.md`
+- `docs/decisions/ADR-001-priority-queue.md`
+
+## Version Roadmap
+- **V1 (Current)**: In-memory, sequential, priority-queue-based execution.
+- **Future Versions**: May explore worker threads (`ExecutorService`), persistence, and recurring cron-based execution.
