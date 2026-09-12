@@ -1,10 +1,10 @@
-# Java Job Scheduler (V4)
+# Java Job Scheduler (V5)
 
 ## Project Overview
-A lightweight, in-memory Java 17 job scheduler designed to demonstrate core engineering concepts including clean architecture, bounded concurrent execution using `ExecutorService`, explicit thread-safe job lifecycle management, controlled failure recovery with exponential backoff retries, time-dependent unit testing, and fundamental scheduling algorithms without relying on heavy enterprise frameworks.
+A lightweight, in-memory Java 17 job scheduler designed to demonstrate core engineering concepts including clean architecture, bounded concurrent execution using `ExecutorService`, explicit thread-safe job lifecycle management, controlled failure recovery with exponential backoff retries, job dependency DAG workflow control, time-dependent unit testing, and fundamental scheduling algorithms without relying on heavy enterprise frameworks.
 
-## V4 Scope & Architectural Evolution
-Version 4 (V4) introduces **controlled failure recovery** and **retry policy integration**. Building upon V3's explicit state machine, V4 adds attempt history tracking (`ExecutionAttempt`), failure classification (`TRANSIENT` vs `PERMANENT`), exponential backoff delay calculation (`ExponentialBackoffStrategy`), and scheduler-managed retry re-queuing while preserving exact job identities and V1-V3 baselines.
+## V5 Scope & Architectural Evolution
+Version 5 (V5) introduces **job dependencies, DAG workflow validation, and scheduler state controls**. Building upon V4's retry engine, V5 adds `Set<String> dependencyIds` to job definitions, introduces the `BLOCKED` lifecycle state, validates acyclic dependency graphs (DFS cycle detection), implements `FailurePolicy` (`CONTINUE`, `HALT_SCHEDULER`), and provides domain-level `resume()` controls.
 
 ## Architecture & Core Components
 ```text
@@ -21,7 +21,11 @@ com.siva.jobscheduler
 │   ├── DefaultFailureClassifier.java
 │   ├── BackoffStrategy.java
 │   ├── ExponentialBackoffStrategy.java
-│   └── RetryPolicy.java
+│   ├── RetryPolicy.java
+│   ├── FailurePolicy.java
+│   └── SchedulerState.java
+├── dependency
+│   └── DependencyGraph.java
 ├── scheduler
 │   └── JobScheduler.java
 ├── execution
@@ -29,19 +33,21 @@ com.siva.jobscheduler
 └── JobSchedulerApplication.java
 ```
 
-- **`domain.Job`**: An immutable Java 17 record representing static job parameters (`id`, `name`, `scheduledAt`, `task`). Identity remains constant across all retries.
-- **`domain.JobExecution`**: Thread-safe runtime state wrapper that manages atomic state transitions and retains a list of `ExecutionAttempt` records.
-- **`domain.ExecutionAttempt`**: Record of an individual execution attempt (`attemptNumber`, `startedAt`, `completedAt`, `outcome`, `failure`).
-- **`domain.RetryPolicy`**: Encapsulates `maxAttempts` (total execution attempts limit, default 1), `FailureClassifier`, and `BackoffStrategy`.
-- **`scheduler.JobScheduler`**: Owns `PriorityQueue<Job>`, evaluates retries upon task failure, calculates backoff delay, transitions `JobExecution` `FAILED -> SCHEDULED`, and re-enqueues jobs.
-- **`execution.JobExecutor`**: Bounded worker pool (`Executors.newFixedThreadPool`), executes individual attempts on background threads, and updates attempt history.
+- **`domain.Job`**: Immutable record with `dependencyIds` (stable Job IDs) and `FailurePolicy`.
+- **`domain.JobStatus`**: Includes `BLOCKED` status.
+- **`domain.JobExecution`**: Manages `BLOCKED -> SCHEDULED` and `BLOCKED -> CANCELLED` transitions.
+- **`dependency.DependencyGraph`**: Validates DAG acyclicity (DFS cycle detection) and evaluates dependency satisfaction.
+- **`scheduler.JobScheduler`**: Keeps blocked jobs out of `PriorityQueue` until dependencies complete. Manages `SchedulerState` (`RUNNING`, `HALTED`, `STOPPED`) and `resume()`.
 
-## Retry Model & Backoff Rules
-- **Job Identity**: A retry is **NOT** a new `Job` object. The `job.id()` remains constant.
-- **`maxAttempts`**: Defines the **TOTAL** execution attempts allowed (e.g., `maxAttempts = 3` means Attempt 1, Attempt 2, and Attempt 3).
-- **Default Behavior**: Unconfigured jobs default to `maxAttempts = 1` (`RetryPolicy.noRetry()`), preserving V3 behavior.
-- **Exponential Backoff**: Delay $\text{initialBackoff} \times 2^{(\text{attempt}-1)}$, clamped to `maxBackoff`.
-- **Centralized Scheduling**: Worker threads never sleep during backoff delays. Retries are scheduled centrally via `JobScheduler` and `PriorityQueue`.
+## Dependency & Workflow Model
+- **Stable ID References**: Dependencies refer to stable Job IDs, preserving job immutability.
+- **PriorityQueue Isolation**: Blocked jobs start in `BLOCKED` and bypass `PriorityQueue` to avoid busy-polling.
+- **Unblocking**: When a prerequisite job completes (`COMPLETED`), satisfied dependent jobs transition `BLOCKED -> SCHEDULED` and enter `PriorityQueue`.
+- **Retry Integration**: Retrying prerequisite jobs (`FAILED -> SCHEDULED`) keep dependents `BLOCKED` until final completion.
+- **FailurePolicy**:
+  - `CONTINUE`: Unrelated independent jobs continue running; dependents of the failed job remain `BLOCKED`.
+  - `HALT_SCHEDULER`: Permanent failure of a critical job halts new dispatches (`HALTED`).
+- **Resumption (`resume()`)**: Restores `SchedulerState` from `HALTED` to `RUNNING` and re-evaluates blocked jobs.
 
 ## Technology Stack
 - **Language**: Java 17
@@ -66,33 +72,39 @@ com.siva.jobscheduler
 ./gradlew run --console=plain
 ```
 
-## Example Output (V4 Failure Recovery & Retries)
+## Example Output (V5 Dependencies & Workflow Control)
 ```text
 ==================================================
- Java Job Scheduler - Version 4
- Controlled Failure Recovery & Retry Engine
+ Java Job Scheduler - Version 5
+ Job Dependencies & Workflow Control
 ==================================================
 
-Registering jobs...
-Registered job: job-a-immediate-success [Policy: noRetry]
-Registered job: job-b-transient-retry [Policy: maxAttempts=3, transient=NetworkTimeoutException]
-Registered job: job-c-permanent-failure [Policy: maxAttempts=3, permanent=InvalidDataException]
+Registering workflow jobs...
+Registered job A: job-a-prereq [Initial: SCHEDULED]
+Registered job B: job-b-step2 [Initial: BLOCKED, Depends: A]
+Registered job C: job-c-step3 [Initial: BLOCKED, Depends: B]
+Registered job D: job-d-failing [Initial: SCHEDULED]
+Registered job E: job-e-dependent-on-d [Initial: BLOCKED, Depends: D]
+Registered job F: job-f-independent [Initial: SCHEDULED]
 
 Scheduler started.
 
-[2026-09-12T08:00:00Z] job-a-immediate-success SCHEDULED -> RUNNING (Attempt 1)
-[2026-09-12T08:00:00Z] job-b-transient-retry SCHEDULED -> RUNNING (Attempt 1)
-[2026-09-12T08:00:00Z] job-c-permanent-failure SCHEDULED -> RUNNING (Attempt 1)
-[2026-09-12T08:00:00.050Z] [pool-1-thread-1] job-a-immediate-success Attempt 1 RUNNING -> COMPLETED
-[2026-09-12T08:00:00.050Z] [pool-1-thread-3] job-c-permanent-failure Attempt 1 RUNNING -> FAILED: Unrecoverable data validation error
-[2026-09-12T08:00:00.050Z] job-c-permanent-failure Attempt 1 FAILED (Permanent / Retries Exhausted). Final status: FAILED
-[2026-09-12T08:00:00.050Z] [pool-1-thread-2] job-b-transient-retry Attempt 1 RUNNING -> FAILED: Connection timed out on attempt 1
-[2026-09-12T08:00:00.050Z] job-b-transient-retry Attempt 1 FAILED (Transient). Retry scheduled for 2026-09-12T08:00:00.150Z
-[2026-09-12T08:00:00.150Z] job-b-transient-retry SCHEDULED -> RUNNING (Attempt 2)
-[2026-09-12T08:00:00.200Z] [pool-1-thread-1] job-b-transient-retry Attempt 2 RUNNING -> FAILED: Connection timed out on attempt 2
-[2026-09-12T08:00:00.200Z] job-b-transient-retry Attempt 2 FAILED (Transient). Retry scheduled for 2026-09-12T08:00:00.400Z
-[2026-09-12T08:00:00.400Z] job-b-transient-retry SCHEDULED -> RUNNING (Attempt 3)
-[2026-09-12T08:00:00.450Z] [pool-1-thread-1] job-b-transient-retry Attempt 3 RUNNING -> COMPLETED
+[2026-09-12T08:39:15.010Z] job-a-prereq SCHEDULED -> RUNNING (Attempt 1)
+[2026-09-12T08:39:15.010Z] job-d-failing SCHEDULED -> RUNNING (Attempt 1)
+[2026-09-12T08:39:15.010Z] job-f-independent SCHEDULED -> RUNNING (Attempt 1)
+[2026-09-12T08:39:15.050Z] [pool-1-thread-3] job-f-independent Attempt 1 RUNNING -> COMPLETED
+[2026-09-12T08:39:15.050Z] [pool-1-thread-2] job-d-failing Attempt 1 RUNNING -> FAILED: Data validation error
+[2026-09-12T08:39:15.050Z] job-d-failing Attempt 1 FAILED (Permanent / Retries Exhausted). Final status: FAILED
+[2026-09-12T08:39:15.050Z] [pool-1-thread-1] job-a-prereq Attempt 1 RUNNING -> FAILED: Connection timed out on attempt 1
+[2026-09-12T08:39:15.050Z] job-a-prereq Attempt 1 FAILED (Transient). Retry scheduled for 2026-09-12T08:39:15.100Z
+[2026-09-12T08:39:15.100Z] job-a-prereq SCHEDULED -> RUNNING (Attempt 2)
+[2026-09-12T08:39:15.140Z] [pool-1-thread-1] job-a-prereq Attempt 2 RUNNING -> COMPLETED
+[2026-09-12T08:39:15.140Z] job-b-step2 BLOCKED -> SCHEDULED (Dependencies satisfied)
+[2026-09-12T08:39:15.140Z] job-b-step2 SCHEDULED -> RUNNING (Attempt 1)
+[2026-09-12T08:39:15.180Z] [pool-1-thread-1] job-b-step2 Attempt 1 RUNNING -> COMPLETED
+[2026-09-12T08:39:15.180Z] job-c-step3 BLOCKED -> SCHEDULED (Dependencies satisfied)
+[2026-09-12T08:39:15.180Z] job-c-step3 SCHEDULED -> RUNNING (Attempt 1)
+[2026-09-12T08:39:15.220Z] [pool-1-thread-1] job-c-step3 Attempt 1 RUNNING -> COMPLETED
 
 All jobs dispatched to executor.
 Scheduler stopped.
@@ -100,12 +112,16 @@ Scheduler stopped.
 ==================================================
  Execution Summary
 ==================================================
-job-a-immediate-success   Attempts: 1 | Status: COMPLETED 
-job-b-transient-retry     Attempts: 3 | Status: COMPLETED 
-job-c-permanent-failure   Attempts: 1 | Status: FAILED     (Reason: Unrecoverable data validation error)
+job-a-prereq              Attempts: 2 | Status: COMPLETED 
+job-b-step2               Attempts: 1 | Status: COMPLETED 
+job-c-step3               Attempts: 1 | Status: COMPLETED 
+job-d-failing             Attempts: 1 | Status: FAILED     (Reason: Data validation error)
+job-e-dependent-on-d      Attempts: 0 | Status: BLOCKED   
+job-f-independent         Attempts: 1 | Status: COMPLETED 
 --------------------------------------------------
-Completed : 2
+Completed : 4
 Failed    : 1
+Blocked   : 1
 ==================================================
 ```
 
@@ -116,14 +132,17 @@ Detailed decision records and version documentation are located in `/docs`:
 - `docs/versions/v2.md`
 - `docs/versions/v3.md`
 - `docs/versions/v4.md`
+- `docs/versions/v5.md`
 - `docs/decisions/ADR-001-priority-queue.md`
 - `docs/decisions/ADR-002-concurrent-execution.md`
 - `docs/decisions/ADR-003-job-lifecycle.md`
 - `docs/decisions/ADR-004-retry-and-reliability.md`
+- `docs/decisions/ADR-005-job-dependencies-and-workflow-control.md`
 
 ## Version Roadmap
 - **V1**: Foundational, in-memory, sequential priority-queue scheduler.
 - **V2**: Decoupled architecture with bounded concurrent execution via `ExecutorService`.
 - **V3**: Explicit thread-safe job lifecycle state machine, cancellation semantics, and failure metadata.
-- **V4 (Current)**: Controlled failure recovery, retry policy, failure classification, and exponential backoff engine.
-- **Future Versions**: May explore job dependencies (V5), recurring cron jobs (V6), persistence (V7), REST APIs (V8), and observability (V9).
+- **V4**: Controlled failure recovery, retry policy, failure classification, and exponential backoff engine.
+- **V5 (Current)**: Job dependencies, DAG cycle detection, BLOCKED state, FailurePolicy, and HALT/RESUME workflow controls.
+- **Future Versions**: May explore recurring cron jobs (V6), persistence (V7), REST APIs (V8), and observability (V9).

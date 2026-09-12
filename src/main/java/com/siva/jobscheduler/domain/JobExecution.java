@@ -22,7 +22,7 @@ public class JobExecution {
 
     public JobExecution(Job job) {
         this.job = Objects.requireNonNull(job, "Job cannot be null");
-        this.status = JobStatus.SCHEDULED;
+        this.status = job.dependencyIds().isEmpty() ? JobStatus.SCHEDULED : JobStatus.BLOCKED;
         this.attempts = new ArrayList<>();
     }
 
@@ -81,8 +81,18 @@ public class JobExecution {
     }
 
     /**
+     * Atomically transitions state from BLOCKED to SCHEDULED when dependencies are satisfied.
+     */
+    public synchronized boolean markUnblocked() {
+        if (this.status != JobStatus.BLOCKED) {
+            return false;
+        }
+        this.status = JobStatus.SCHEDULED;
+        return true;
+    }
+
+    /**
      * Atomically transitions state from SCHEDULED to RUNNING.
-     * Returns true if transition succeeds, or false if already cancelled/non-SCHEDULED.
      */
     public synchronized boolean markRunning(Instant timestamp) {
         if (this.status != JobStatus.SCHEDULED) {
@@ -95,11 +105,10 @@ public class JobExecution {
     }
 
     /**
-     * Atomically transitions state from SCHEDULED to CANCELLED.
-     * Returns true if transition succeeds, or false if already running or terminal.
+     * Atomically transitions state from SCHEDULED or BLOCKED to CANCELLED.
      */
     public synchronized boolean markCancelled() {
-        if (this.status != JobStatus.SCHEDULED) {
+        if (this.status != JobStatus.SCHEDULED && this.status != JobStatus.BLOCKED) {
             return false;
         }
         this.status = JobStatus.CANCELLED;
@@ -153,11 +162,17 @@ public class JobExecution {
         }
 
         switch (targetStatus) {
+            case SCHEDULED -> {
+                if (this.status == JobStatus.BLOCKED) {
+                    markUnblocked();
+                } else if (this.status == JobStatus.FAILED) {
+                    markRetryScheduled();
+                }
+            }
             case RUNNING -> markRunning(timestamp != null ? timestamp : Instant.now());
             case CANCELLED -> markCancelled();
             case COMPLETED -> markCompleted(timestamp != null ? timestamp : Instant.now());
             case FAILED -> markFailed(timestamp != null ? timestamp : Instant.now(), failureError);
-            case SCHEDULED -> markRetryScheduled();
             default -> throw new IllegalArgumentException("Unsupported target status: " + targetStatus);
         }
     }
@@ -169,7 +184,9 @@ public class JobExecution {
     }
 
     /**
-     * Enforces valid V4 lifecycle state transitions:
+     * Enforces valid V5 lifecycle state transitions:
+     * - BLOCKED -> SCHEDULED
+     * - BLOCKED -> CANCELLED
      * - SCHEDULED -> RUNNING
      * - SCHEDULED -> CANCELLED
      * - RUNNING -> COMPLETED
@@ -179,6 +196,9 @@ public class JobExecution {
     public static boolean isValidTransition(JobStatus current, JobStatus target) {
         if (current == null || target == null) {
             return false;
+        }
+        if (current == JobStatus.BLOCKED) {
+            return target == JobStatus.SCHEDULED || target == JobStatus.CANCELLED;
         }
         if (current == JobStatus.SCHEDULED) {
             return target == JobStatus.RUNNING || target == JobStatus.CANCELLED;

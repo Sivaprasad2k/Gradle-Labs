@@ -8,7 +8,8 @@ public enum JobStatus {
     RUNNING,
     COMPLETED,
     FAILED,
-    CANCELLED;
+    CANCELLED,
+    BLOCKED;
 
     /**
      * Checks if the status is a terminal state (cannot transition to any other state).

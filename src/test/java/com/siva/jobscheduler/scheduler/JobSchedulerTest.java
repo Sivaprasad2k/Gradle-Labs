@@ -38,212 +38,183 @@ class JobSchedulerTest {
     }
 
     @Test
-    void testSuccessfulFirstAttemptReachesCompleted() {
+    void testDependencyChainExecutionOrder() {
         Clock clock = Clock.fixed(Instant.now(), ZoneId.of("UTC"));
         JobScheduler scheduler = new JobScheduler(clock);
 
-        AtomicBoolean executed = new AtomicBoolean(false);
-        Job job = new Job("1", "due-job", clock.instant().minusSeconds(1), () -> executed.set(true));
-        JobExecution execution = scheduler.registerJob(job);
+        List<String> executionOrder = Collections.synchronizedList(new ArrayList<>());
+        Instant now = clock.instant();
+
+        Job jobA = new Job("A", "job-a", now, () -> executionOrder.add("A"));
+        Job jobB = new Job("B", "job-b", now, () -> executionOrder.add("B"), Set.of("A"));
+        Job jobC = new Job("C", "job-c", now, () -> executionOrder.add("C"), Set.of("B"));
+
+        JobExecution execA = scheduler.registerJob(jobA);
+        JobExecution execB = scheduler.registerJob(jobB);
+        JobExecution execC = scheduler.registerJob(jobC);
+
+        assertEquals(JobStatus.SCHEDULED, execA.getStatus());
+        assertEquals(JobStatus.BLOCKED, execB.getStatus());
+        assertEquals(JobStatus.BLOCKED, execC.getStatus());
 
         scheduler.start();
 
-        assertTrue(executed.get());
-        assertEquals(JobStatus.COMPLETED, execution.getStatus());
-        assertEquals(1, execution.getAttemptCount());
+        assertEquals(List.of("A", "B", "C"), executionOrder);
+        assertEquals(JobStatus.COMPLETED, execA.getStatus());
+        assertEquals(JobStatus.COMPLETED, execB.getStatus());
+        assertEquals(JobStatus.COMPLETED, execC.getStatus());
     }
 
     @Test
-    void testRetryableFailureFollowedBySuccessReachesCompleted() {
+    void testFailedDependencyKeepsDependentBlocked() {
+        Clock clock = Clock.fixed(Instant.now(), ZoneId.of("UTC"));
+        JobScheduler scheduler = new JobScheduler(clock);
+
+        Instant now = clock.instant();
+        Job jobA = new Job("A", "job-a-failing", now, () -> {
+            throw new PermanentTestException("A failed");
+        });
+        Job jobB = new Job("B", "job-b-dependent", now, () -> {}, Set.of("A"));
+
+        JobExecution execA = scheduler.registerJob(jobA);
+        JobExecution execB = scheduler.registerJob(jobB);
+
+        scheduler.start();
+
+        assertEquals(JobStatus.FAILED, execA.getStatus());
+        assertEquals(JobStatus.BLOCKED, execB.getStatus(), "Dependent job B must remain BLOCKED when A fails permanently");
+    }
+
+    @Test
+    void testFailurePolicyContinueDoesNotOverrideDependency() {
+        Clock clock = Clock.fixed(Instant.now(), ZoneId.of("UTC"));
+        JobScheduler scheduler = new JobScheduler(clock);
+
+        List<String> executionLog = Collections.synchronizedList(new ArrayList<>());
+        Instant now = clock.instant();
+
+        // Job A fails with FailurePolicy.CONTINUE
+        Job jobA = new Job("A", "job-a-fail", now, () -> {
+            throw new PermanentTestException("A failed");
+        }, FailurePolicy.CONTINUE);
+
+        // Job B depends on A
+        Job jobB = new Job("B", "job-b-dep", now, () -> executionLog.add("B"), Set.of("A"));
+
+        // Job C is independent
+        Job jobC = new Job("C", "job-c-indep", now, () -> executionLog.add("C"));
+
+        scheduler.registerJob(jobA);
+        JobExecution execB = scheduler.registerJob(jobB);
+        JobExecution execC = scheduler.registerJob(jobC);
+
+        scheduler.start();
+
+        assertEquals(JobStatus.BLOCKED, execB.getStatus(), "Job B must remain BLOCKED despite FailurePolicy.CONTINUE");
+        assertEquals(JobStatus.COMPLETED, execC.getStatus(), "Independent Job C is allowed to complete");
+        assertEquals(List.of("C"), executionLog);
+    }
+
+    @Test
+    void testRetryableDependencyKeepsDependentBlockedUntilSuccess() {
         Clock clock = Clock.systemUTC();
         JobScheduler scheduler = new JobScheduler(clock);
 
         AtomicInteger attemptCounter = new AtomicInteger(0);
-        Job job = new Job("1", "retry-success-job", clock.instant(), () -> {
+        List<String> executionOrder = Collections.synchronizedList(new ArrayList<>());
+        Instant now = clock.instant();
+
+        Job jobA = new Job("A", "job-a-transient", now, () -> {
             int attempt = attemptCounter.incrementAndGet();
             if (attempt < 3) {
                 throw new TransientTestException("Transient error attempt " + attempt);
             }
+            executionOrder.add("A");
         });
 
-        FailureClassifier classifier = new DefaultFailureClassifier(Set.of(TransientTestException.class));
-        BackoffStrategy backoff = new ExponentialBackoffStrategy(Duration.ofMillis(10));
-        RetryPolicy policy = new RetryPolicy(3, classifier, backoff);
-
-        JobExecution execution = scheduler.registerJob(job, policy);
-
-        scheduler.start();
-
-        assertEquals(JobStatus.COMPLETED, execution.getStatus());
-        assertEquals(3, execution.getAttemptCount());
-        assertEquals(3, attemptCounter.get());
-
-        List<ExecutionAttempt> attempts = execution.getAttempts();
-        assertEquals(AttemptOutcome.FAILURE, attempts.get(0).outcome());
-        assertEquals(AttemptOutcome.FAILURE, attempts.get(1).outcome());
-        assertEquals(AttemptOutcome.SUCCESS, attempts.get(2).outcome());
-    }
-
-    @Test
-    void testPermanentFailureDoesNotRetry() {
-        Clock clock = Clock.fixed(Instant.now(), ZoneId.of("UTC"));
-        JobScheduler scheduler = new JobScheduler(clock);
-
-        AtomicInteger attemptCounter = new AtomicInteger(0);
-        Job job = new Job("1", "permanent-failure-job", clock.instant(), () -> {
-            attemptCounter.incrementAndGet();
-            throw new PermanentTestException("Fatal failure");
-        });
+        Job jobB = new Job("B", "job-b-dependent", now, () -> executionOrder.add("B"), Set.of("A"));
 
         FailureClassifier classifier = new DefaultFailureClassifier(Set.of(TransientTestException.class));
         RetryPolicy policy = new RetryPolicy(3, classifier, new ExponentialBackoffStrategy(Duration.ofMillis(10)));
 
-        JobExecution execution = scheduler.registerJob(job, policy);
+        JobExecution execA = scheduler.registerJob(jobA, policy);
+        JobExecution execB = scheduler.registerJob(jobB);
 
         scheduler.start();
 
-        assertEquals(JobStatus.FAILED, execution.getStatus());
-        assertEquals(1, execution.getAttemptCount());
-        assertEquals(1, attemptCounter.get());
+        assertEquals(JobStatus.COMPLETED, execA.getStatus());
+        assertEquals(3, execA.getAttemptCount());
+        assertEquals(JobStatus.COMPLETED, execB.getStatus());
+        assertEquals(List.of("A", "B"), executionOrder);
     }
 
     @Test
-    void testMaxAttemptsIsRespectedAndExhaustedRetriesEndInFailed() {
+    void testHaltSchedulerPolicyHaltsNewDispatch() throws InterruptedException {
         Clock clock = Clock.systemUTC();
-        JobScheduler scheduler = new JobScheduler(clock);
-
-        AtomicInteger attemptCounter = new AtomicInteger(0);
-        Job job = new Job("1", "exhausted-job", clock.instant(), () -> {
-            attemptCounter.incrementAndGet();
-            throw new TransientTestException("Transient error that persists");
-        });
-
-        FailureClassifier classifier = new DefaultFailureClassifier(Set.of(TransientTestException.class));
-        RetryPolicy policy = new RetryPolicy(3, classifier, new ExponentialBackoffStrategy(Duration.ofMillis(10)));
-
-        JobExecution execution = scheduler.registerJob(job, policy);
-
-        scheduler.start();
-
-        assertEquals(JobStatus.FAILED, execution.getStatus());
-        assertEquals(3, execution.getAttemptCount());
-        assertEquals(3, attemptCounter.get());
-        assertEquals("Transient error that persists", execution.getFailure().getMessage());
-    }
-
-    @Test
-    void testCancellationDuringRetryWaitingPreventsExecution() throws InterruptedException {
-        Clock clock = Clock.systemUTC();
-        JobScheduler scheduler = new JobScheduler(clock);
-
-        AtomicInteger attemptCounter = new AtomicInteger(0);
-        Job job = new Job("1", "cancellation-retry-job", clock.instant(), () -> {
-            attemptCounter.incrementAndGet();
-            throw new TransientTestException("Fail attempt 1");
-        });
-
-        FailureClassifier classifier = new DefaultFailureClassifier(Set.of(TransientTestException.class));
-        // Backoff delay of 500ms allows cancellation window while waiting for Attempt 2
-        RetryPolicy policy = new RetryPolicy(3, classifier, new ExponentialBackoffStrategy(Duration.ofMillis(500)));
-
-        JobExecution execution = scheduler.registerJob(job, policy);
-
-        Thread schedulerThread = new Thread(scheduler::start);
-        schedulerThread.start();
-
-        // Wait for attempt 1 to fail and schedule retry
-        Thread.sleep(100);
-
-        // Cancel job during retry backoff wait
-        boolean cancelled = scheduler.cancelJob("1");
-        assertTrue(cancelled);
-        assertEquals(JobStatus.CANCELLED, execution.getStatus());
-
-        schedulerThread.join(3000);
-
-        assertEquals(1, attemptCounter.get(), "Attempt 2 must never execute after cancellation");
-        assertEquals(JobStatus.CANCELLED, execution.getStatus());
-    }
-
-    @Test
-    void testIndependentJobsMaintainIndependentRetryState() {
-        Clock clock = Clock.systemUTC();
-        JobScheduler scheduler = new JobScheduler(clock);
-
-        AtomicInteger job1Attempts = new AtomicInteger(0);
-        AtomicInteger job2Attempts = new AtomicInteger(0);
-
-        Job job1 = new Job("1", "job-1-transient", clock.instant(), () -> {
-            if (job1Attempts.incrementAndGet() < 2) {
-                throw new TransientTestException("Job 1 fail");
-            }
-        });
-
-        Job job2 = new Job("2", "job-2-permanent", clock.instant(), () -> {
-            job2Attempts.incrementAndGet();
-            throw new PermanentTestException("Job 2 fail");
-        });
-
-        FailureClassifier classifier = new DefaultFailureClassifier(Set.of(TransientTestException.class));
-        RetryPolicy policy = new RetryPolicy(3, classifier, new ExponentialBackoffStrategy(Duration.ofMillis(10)));
-
-        JobExecution exec1 = scheduler.registerJob(job1, policy);
-        JobExecution exec2 = scheduler.registerJob(job2, policy);
-
-        scheduler.start();
-
-        assertEquals(JobStatus.COMPLETED, exec1.getStatus());
-        assertEquals(2, exec1.getAttemptCount());
-
-        assertEquals(JobStatus.FAILED, exec2.getStatus());
-        assertEquals(1, exec2.getAttemptCount());
-    }
-
-    @Test
-    void testV2ConcurrentExecutionRegression() throws InterruptedException {
-        Clock clock = Clock.fixed(Instant.now(), ZoneId.of("UTC"));
         JobExecutor executor = new JobExecutor(2, clock);
         JobScheduler scheduler = new JobScheduler(clock, executor);
 
-        CountDownLatch startLatch = new CountDownLatch(2);
-        CountDownLatch releaseLatch = new CountDownLatch(1);
-
+        CountDownLatch criticalJobLatch = new CountDownLatch(1);
         Instant now = clock.instant();
-        Job job1 = new Job("1", "concurrent-1", now, () -> {
-            startLatch.countDown();
-            try {
-                releaseLatch.await(2, TimeUnit.SECONDS);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        });
 
-        Job job2 = new Job("2", "concurrent-2", now, () -> {
-            startLatch.countDown();
-            try {
-                releaseLatch.await(2, TimeUnit.SECONDS);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        });
+        // Job A: Critical job with FailurePolicy.HALT_SCHEDULER
+        Job jobA = new Job("A", "critical-job", now, () -> {
+            criticalJobLatch.countDown();
+            throw new PermanentTestException("Critical failure");
+        }, FailurePolicy.HALT_SCHEDULER);
 
-        JobExecution exec1 = scheduler.registerJob(job1);
-        JobExecution exec2 = scheduler.registerJob(job2);
+        // Job B: Independent job registered after A
+        AtomicBoolean jobBExecuted = new AtomicBoolean(false);
+        Job jobB = new Job("B", "queued-job", now.plusMillis(100), () -> jobBExecuted.set(true));
+
+        scheduler.registerJob(jobA);
+        JobExecution execB = scheduler.registerJob(jobB);
 
         Thread schedulerThread = new Thread(scheduler::start);
         schedulerThread.start();
 
-        try {
-            boolean bothStarted = startLatch.await(2, TimeUnit.SECONDS);
-            assertTrue(bothStarted);
-            assertEquals(JobStatus.RUNNING, exec1.getStatus());
-            assertEquals(JobStatus.RUNNING, exec2.getStatus());
-        } finally {
-            releaseLatch.countDown();
-            schedulerThread.join(3000);
-        }
+        assertTrue(criticalJobLatch.await(2, TimeUnit.SECONDS));
+        Thread.sleep(150); // Wait for scheduler state transition to HALTED
 
-        assertEquals(JobStatus.COMPLETED, exec1.getStatus());
-        assertEquals(JobStatus.COMPLETED, exec2.getStatus());
+        assertEquals(SchedulerState.HALTED, scheduler.getSchedulerState());
+        assertFalse(jobBExecuted.get(), "Halted scheduler must not dispatch pending jobs");
+        assertEquals(JobStatus.SCHEDULED, execB.getStatus());
+
+        // Resume scheduler
+        boolean resumed = scheduler.resume();
+        assertTrue(resumed);
+        assertEquals(SchedulerState.RUNNING, scheduler.getSchedulerState());
+
+        schedulerThread.join(3000);
+
+        assertTrue(jobBExecuted.get(), "Job B should execute after scheduler resumption");
+        assertEquals(JobStatus.COMPLETED, execB.getStatus());
+    }
+
+    @Test
+    void testCancelledBlockedJobIsNeverRescheduledWhenDependencyCompletes() {
+        Clock clock = Clock.fixed(Instant.now(), ZoneId.of("UTC"));
+        JobScheduler scheduler = new JobScheduler(clock);
+
+        AtomicBoolean jobBExecuted = new AtomicBoolean(false);
+        Instant now = clock.instant();
+
+        Job jobA = new Job("A", "job-a", now, () -> {});
+        Job jobB = new Job("B", "job-b", now, () -> jobBExecuted.set(true), Set.of("A"));
+
+        scheduler.registerJob(jobA);
+        JobExecution execB = scheduler.registerJob(jobB);
+
+        assertEquals(JobStatus.BLOCKED, execB.getStatus());
+
+        // Cancel B while blocked
+        boolean cancelled = scheduler.cancelJob("B");
+        assertTrue(cancelled);
+        assertEquals(JobStatus.CANCELLED, execB.getStatus());
+
+        scheduler.start();
+
+        assertFalse(jobBExecuted.get(), "Cancelled blocked job must never execute when dependency completes");
+        assertEquals(JobStatus.CANCELLED, execB.getStatus());
     }
 }

@@ -1,5 +1,6 @@
 package com.siva.jobscheduler;
 
+import com.siva.jobscheduler.dependency.DependencyGraph;
 import com.siva.jobscheduler.domain.*;
 import com.siva.jobscheduler.execution.JobExecutor;
 import com.siva.jobscheduler.scheduler.JobScheduler;
@@ -27,8 +28,8 @@ public class JobSchedulerApplication {
 
     public static void main(String[] args) {
         System.out.println("==================================================");
-        System.out.println(" Java Job Scheduler - Version 4");
-        System.out.println(" Controlled Failure Recovery & Retry Engine");
+        System.out.println(" Java Job Scheduler - Version 5");
+        System.out.println(" Job Dependencies & Workflow Control");
         System.out.println("==================================================\n");
 
         Clock clock = Clock.systemUTC();
@@ -36,48 +37,58 @@ public class JobSchedulerApplication {
         JobScheduler scheduler = new JobScheduler(clock, executor);
         Instant now = clock.instant();
 
-        // Failure Classifier: NetworkTimeoutException is TRANSIENT, InvalidDataException is PERMANENT
+        // Failure Policy & Retry Policy setup
         FailureClassifier classifier = new DefaultFailureClassifier(Set.of(NetworkTimeoutException.class));
-        BackoffStrategy backoff = new ExponentialBackoffStrategy(Duration.ofMillis(100), Duration.ofMillis(500));
+        BackoffStrategy backoff = new ExponentialBackoffStrategy(Duration.ofMillis(50), Duration.ofMillis(200));
         RetryPolicy retryPolicy = new RetryPolicy(3, classifier, backoff);
 
-        // Job A: Succeeds immediately
-        Job jobA = new Job("1", "job-a-immediate-success", now, () -> simulateWork(50));
-
-        // Job B: Fails transiently on Attempts 1 & 2, succeeds on Attempt 3
-        AtomicInteger jobBAttempts = new AtomicInteger(0);
-        Job jobB = new Job("2", "job-b-transient-retry", now, () -> {
-            int attempt = jobBAttempts.incrementAndGet();
-            simulateWork(50);
-            if (attempt < 3) {
-                throw new NetworkTimeoutException("Connection timed out on attempt " + attempt);
+        // 1. Dependency Chain: A -> B -> C
+        AtomicInteger jobAAttempts = new AtomicInteger(0);
+        Job jobA = new Job("A", "job-a-prereq", now, () -> {
+            int attempt = jobAAttempts.incrementAndGet();
+            simulateWork(40);
+            if (attempt < 2) {
+                throw new NetworkTimeoutException("Transient failure on attempt 1");
             }
         });
 
-        // Job C: Fails permanently on Attempt 1
-        Job jobC = new Job("3", "job-c-permanent-failure", now, () -> {
-            simulateWork(50);
-            throw new InvalidDataException("Unrecoverable data validation error");
-        });
+        Job jobB = new Job("B", "job-b-step2", now, () -> simulateWork(40), Set.of("A"));
+        Job jobC = new Job("C", "job-c-step3", now, () -> simulateWork(40), Set.of("B"));
 
-        System.out.println("Registering jobs...");
-        JobExecution execA = scheduler.registerJob(jobA, RetryPolicy.noRetry());
-        System.out.println("Registered job: " + jobA.name() + " [Policy: noRetry]");
+        // 2. Permanent Failure Dependency: D (fails) -> E (remains BLOCKED), F (Independent)
+        Job jobD = new Job("D", "job-d-failing", now, () -> {
+            simulateWork(40);
+            throw new InvalidDataException("Data validation error");
+        }, FailurePolicy.CONTINUE);
 
-        JobExecution execB = scheduler.registerJob(jobB, retryPolicy);
-        System.out.println("Registered job: " + jobB.name() + " [Policy: maxAttempts=3, transient=NetworkTimeoutException]");
+        Job jobE = new Job("E", "job-e-dependent-on-d", now, () -> simulateWork(40), Set.of("D"));
+        Job jobF = new Job("F", "job-f-independent", now, () -> simulateWork(40));
 
-        JobExecution execC = scheduler.registerJob(jobC, retryPolicy);
-        System.out.println("Registered job: " + jobC.name() + " [Policy: maxAttempts=3, permanent=InvalidDataException]");
+        System.out.println("Registering workflow jobs...");
+        JobExecution execA = scheduler.registerJob(jobA, retryPolicy);
+        JobExecution execB = scheduler.registerJob(jobB);
+        JobExecution execC = scheduler.registerJob(jobC);
+
+        JobExecution execD = scheduler.registerJob(jobD, retryPolicy);
+        JobExecution execE = scheduler.registerJob(jobE);
+        JobExecution execF = scheduler.registerJob(jobF);
+
+        System.out.println("Registered job A: " + jobA.name() + " [Initial: " + execA.getStatus() + "]");
+        System.out.println("Registered job B: " + jobB.name() + " [Initial: " + execB.getStatus() + ", Depends: A]");
+        System.out.println("Registered job C: " + jobC.name() + " [Initial: " + execC.getStatus() + ", Depends: B]");
+        System.out.println("Registered job D: " + jobD.name() + " [Initial: " + execD.getStatus() + "]");
+        System.out.println("Registered job E: " + jobE.name() + " [Initial: " + execE.getStatus() + ", Depends: D]");
+        System.out.println("Registered job F: " + jobF.name() + " [Initial: " + execF.getStatus() + "]");
         System.out.println();
 
-        // Start scheduler loop
+        // Execute workflow
         scheduler.start();
 
         // Display Execution Summary
-        List<JobExecution> executions = List.of(execA, execB, execC);
+        List<JobExecution> executions = List.of(execA, execB, execC, execD, execE, execF);
         long completedCount = executions.stream().filter(e -> e.getStatus() == JobStatus.COMPLETED).count();
         long failedCount = executions.stream().filter(e -> e.getStatus() == JobStatus.FAILED).count();
+        long blockedCount = executions.stream().filter(e -> e.getStatus() == JobStatus.BLOCKED).count();
 
         System.out.println("\n==================================================");
         System.out.println(" Execution Summary");
@@ -92,6 +103,7 @@ public class JobSchedulerApplication {
         System.out.println("--------------------------------------------------");
         System.out.printf("Completed : %d%n", completedCount);
         System.out.printf("Failed    : %d%n", failedCount);
+        System.out.printf("Blocked   : %d%n", blockedCount);
         System.out.println("==================================================");
     }
 
