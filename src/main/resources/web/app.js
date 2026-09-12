@@ -174,16 +174,14 @@ document.addEventListener('DOMContentLoaded', () => {
       // Banner headline
       const headline = document.getElementById('banner-headline');
       if (headline) {
-        if (status === 'RUNNING' && data.failedExecutions === 0) {
-          headline.textContent = 'Your scheduler is running smoothly.';
-        } else if (status === 'RUNNING' && data.failedExecutions > 0) {
-          headline.textContent = `Your scheduler is running. ${data.failedExecutions} failed execution(s) need attention.`;
+        if (status === 'RUNNING') {
+          headline.textContent = 'Scheduler Overview';
         } else if (status === 'HALTED') {
-          headline.textContent = 'Scheduler is halted. Resume to continue dispatching.';
+          headline.textContent = 'Scheduler Halted';
         } else if (status === 'STOPPED') {
-          headline.textContent = 'Scheduler has been shut down.';
+          headline.textContent = 'Scheduler Stopped';
         } else {
-          headline.textContent = `Scheduler status: ${status}`;
+          headline.textContent = `Scheduler: ${status}`;
         }
       }
 
@@ -524,51 +522,129 @@ document.addEventListener('DOMContentLoaded', () => {
     const container = document.getElementById('workflow-graph-container');
     if (!container) return;
 
-    container.innerHTML = '<div class="empty-state-block"><span class="loading-spinner"></span> Loading workflow data…</div>';
+    container.innerHTML = '<div class="empty-state"><span class="loading-spinner"></span> Loading workflow DAG…</div>';
 
     try {
       const res = await fetch(`${API_BASE}/jobs`);
       if (!res.ok) {
-        container.innerHTML = '<div class="empty-state-block error-state">Failed to load workflow data.</div>';
+        container.innerHTML = '<div class="empty-state">Failed to load workflow data.</div>';
         return;
       }
       const jobs = await res.json();
 
-      // Filter only jobs that have dependencies
-      const withDeps = jobs.filter(j => j.dependencyIds && j.dependencyIds.length > 0);
-
-      if (jobs.length === 0) {
-        container.innerHTML = '<div class="empty-state-block">No jobs registered. Workflows will appear when jobs with dependencies are created.</div>';
+      if (!jobs || jobs.length === 0) {
+        container.innerHTML = '<div class="empty-state">No jobs registered. Workflows will appear when jobs are created.</div>';
         return;
       }
 
-      if (withDeps.length === 0) {
-        container.innerHTML = `
-          <div class="workflow-info">
-            <div class="empty-state-block">No dependency relationships found among ${jobs.length} registered job(s).</div>
-            <div class="dag-simple-list">
-              ${jobs.map(j => `
-                <div class="dag-node">
-                  <span class="code">${escapeHtml(j.jobId || j.id)}</span>
-                  <span class="type-tag one-time">Independent</span>
+      // Map prerequisite dependencies and dependent jobs
+      const depMap = new Map(); // jobId -> Array of prerequisite jobIds
+      const dependentMap = new Map(); // jobId -> Set of jobIds depending on this job
+
+      jobs.forEach(j => {
+        const id = j.jobId || j.id;
+        const deps = j.dependencyIds || [];
+        depMap.set(id, deps);
+        deps.forEach(depId => {
+          if (!dependentMap.has(depId)) dependentMap.set(depId, new Set());
+          dependentMap.get(depId).add(id);
+        });
+      });
+
+      const independentJobs = [];
+      const dependentJobs = [];
+
+      jobs.forEach(j => {
+        const id = j.jobId || j.id;
+        const hasPrereqs = (depMap.get(id) && depMap.get(id).length > 0);
+        const hasDependents = (dependentMap.has(id) && dependentMap.get(id).size > 0);
+
+        if (!hasPrereqs && !hasDependents) {
+          independentJobs.push(j);
+        } else {
+          dependentJobs.push(j);
+        }
+      });
+
+      let html = '';
+
+      // Render Dependency Chains (e.g. A -> B)
+      if (dependentJobs.length > 0) {
+        html += '<div class="dag-group"><div class="dag-section-title">Dependency DAG Workflows</div><div class="dag-list">';
+
+        // Find root nodes of chains (jobs with no prerequisites but having dependents)
+        const roots = dependentJobs.filter(j => {
+          const id = j.jobId || j.id;
+          const deps = depMap.get(id) || [];
+          return deps.length === 0;
+        });
+
+        if (roots.length > 0) {
+          roots.forEach(rootJob => {
+            const rootId = rootJob.jobId || rootJob.id;
+            const dependents = Array.from(dependentMap.get(rootId) || []);
+
+            dependents.forEach(depId => {
+              const childJob = jobs.find(j => (j.jobId || j.id) === depId);
+              html += `
+                <div class="dag-chain">
+                  <div class="dag-node">
+                    <span class="code">${escapeHtml(rootId)}</span>
+                    <span class="dep-label">Prerequisite (${escapeHtml(rootJob.name || rootId)})</span>
+                  </div>
+                  <span class="dag-arrow">→</span>
+                  <div class="dag-node">
+                    <span class="code">${escapeHtml(depId)}</span>
+                    <span class="dep-label">Dependent (${escapeHtml(childJob ? (childJob.name || depId) : depId)})</span>
+                  </div>
                 </div>
-              `).join('')}
-            </div>
-          </div>
-        `;
-        return;
+              `;
+            });
+          });
+        } else {
+          // Fallback for non-root dependency items
+          dependentJobs.forEach(j => {
+            const id = j.jobId || j.id;
+            const deps = j.dependencyIds || [];
+            html += `
+              <div class="dag-chain">
+                <div class="dag-node">
+                  <span class="code">${escapeHtml(deps.join(', '))}</span>
+                  <span class="dep-label">Prerequisite</span>
+                </div>
+                <span class="dag-arrow">→</span>
+                <div class="dag-node">
+                  <span class="code">${escapeHtml(id)}</span>
+                  <span class="dep-label">Dependent</span>
+                </div>
+              </div>
+            `;
+          });
+        }
+
+        html += '</div></div>';
       }
 
-      // Build DAG visualization
-      container.innerHTML = jobs.map(j => `
-        <div class="dag-node ${j.dependencyIds && j.dependencyIds.length > 0 ? 'has-deps' : ''}">
-          <span class="code">${escapeHtml(j.jobId || j.id)}</span>
-          ${j.dependencyIds && j.dependencyIds.length > 0 ? `<span class="dep-label">Depends on: ${j.dependencyIds.map(d => escapeHtml(d)).join(', ')}</span>` : '<span class="dep-label">Root</span>'}
-        </div>
-      `).join('<div class="dag-arrow">→</div>');
+      // Render Independent Jobs (e.g. R1)
+      if (independentJobs.length > 0) {
+        html += '<div class="dag-group" style="margin-top: 16px;"><div class="dag-section-title">Independent Schedules</div><div class="dag-list">';
+        independentJobs.forEach(j => {
+          const id = j.jobId || j.id;
+          const recText = j.recurrencePolicy ? `${j.recurrencePolicy.type || 'RECURRING'}` : 'One-time';
+          html += `
+            <div class="dag-node">
+              <span class="code">${escapeHtml(id)}</span>
+              <span class="dep-label">${escapeHtml(j.name || id)} (${recText})</span>
+            </div>
+          `;
+        });
+        html += '</div></div>';
+      }
+
+      container.innerHTML = html;
 
     } catch (err) {
-      container.innerHTML = `<div class="empty-state-block error-state">Error loading workflows: ${escapeHtml(err.message)}</div>`;
+      container.innerHTML = `<div class="empty-state">Error loading workflows: ${escapeHtml(err.message)}</div>`;
     }
   }
 
