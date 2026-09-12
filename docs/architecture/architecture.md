@@ -1,7 +1,7 @@
-# Architecture: Version 5
+# Architecture: Version 6
 
 ## Overview
-The Job Scheduler V5 introduces **job dependencies, DAG workflow validation, and scheduler state controls**. It separates dependency evaluation (`DependencyGraph`) from priority execution ordering (`PriorityQueue`), adds the `BLOCKED` status, supports failure policies (`CONTINUE`, `HALT_SCHEDULER`), and provides domain-level `resume()` controls.
+The Job Scheduler V6 introduces **recurring jobs, fixed-rate scheduling, and missed-occurrence coalescing**. It decouples recurring job definitions from execution occurrences (`executionId`), introduces `FixedRateRecurrence`, enforces no-overlapping-execution invariants, and isolates retry attempts from recurrence occurrences while preserving V1–V5 DAG dependencies and workflow control policies.
 
 ## Package Architecture & Component Boundaries
 
@@ -24,6 +24,11 @@ com.siva.jobscheduler/
 │   ├── FailurePolicy.java
 │   └── SchedulerState.java
 │
+├── recurrence/
+│   ├── RecurrencePolicy.java
+│   ├── FixedRateRecurrence.java
+│   └── RecurrenceState.java
+│
 ├── dependency/
 │   └── DependencyGraph.java
 │
@@ -37,56 +42,26 @@ com.siva.jobscheduler/
 ```
 
 ### 1. Domain Layer (`com.siva.jobscheduler.domain`)
-- **`Job`**: Immutable record including `dependencyIds` (Set of stable Job IDs) and `FailurePolicy`.
-- **`JobStatus`**: Extended to include `BLOCKED` status.
-- **`FailurePolicy`**: Enum (`CONTINUE`, `HALT_SCHEDULER`).
-- **`SchedulerState`**: Enum (`RUNNING`, `HALTED`, `STOPPED`).
-- **`JobExecution`**: Thread-safe state machine managing `BLOCKED -> SCHEDULED` and `BLOCKED -> CANCELLED` transitions.
+- **`Job`**: Immutable record including optional `RecurrencePolicy`, `dependencyIds`, and `FailurePolicy`.
+- **`JobExecution`**: Manages explicit execution occurrence identity (`executionId = jobId#occurrenceNumber`) and lifecycle transitions.
 
-### 2. Dependency Layer (`com.siva.jobscheduler.dependency`)
-- **`DependencyGraph`**: Tracks dependency relationships using stable Job IDs. Validates DAG acyclicity via DFS cycle detection during registration. Evaluates eligibility (`isSatisfied`).
+### 2. Recurrence Layer (`com.siva.jobscheduler.recurrence`)
+- **`RecurrencePolicy`**: Interface defining occurrence eligibility and next scheduled time calculations.
+- **`FixedRateRecurrence`**: Concrete record implementing fixed-rate calculations and missed-occurrence coalescing.
+- **`RecurrenceState`**: Tracks occurrence count, last scheduled time, and schedule cancellation status per job.
 
 ### 3. Scheduler Layer (`com.siva.jobscheduler.scheduler`)
-- **`JobScheduler`**: Manages PriorityQueue, DependencyGraph, and SchedulerState.
-  - Places jobs without dependencies in `SCHEDULED` and offers to `PriorityQueue`.
-  - Places jobs with unsatisfied dependencies in `BLOCKED` (bypasses `PriorityQueue`).
-  - Upon job completion, unblocks satisfied dependents (`BLOCKED -> SCHEDULED`) and offers them to `PriorityQueue`.
-  - Upon critical job failure (`HALT_SCHEDULER`), transitions `SchedulerState` to `HALTED`.
-  - Exposes `resume()` to transition `HALTED -> RUNNING`.
+- **`JobScheduler`**: Core scheduling engine managing PriorityQueue, DependencyGraph, RecurrenceStates, and execution history.
+  - Generates next recurrence occurrence upon completion of current execution.
+  - Enforces no-overlapping-execution invariant (at most 1 active execution per job).
+  - Supports schedule cancellation (`cancelRecurrence`).
 
-### 4. Execution Layer (`com.siva.jobscheduler.execution`)
-- **`JobExecutor`**: Bounded worker thread pool executing attempts and notifying completion.
-
-## Dependency Workflow & PriorityQueue Isolation
+## Recurrence & Execution Hierarchy
 
 ```text
-Registered Job
-      │
-  Has Dependencies?
-      ├───── No ──────> SCHEDULED ───> PriorityQueue ───> JobExecutor
-      │                                     ▲
-      └───── Yes ─────> BLOCKED             │
-                           │                │
-                (Prerequisites Complete)    │
-                           │                │
-                           └────────────────┘
-```
-
-## Failure Policy & HALT / RESUME Flow
-
-```text
-Job Execution FAILED (Permanent)
-      │
-  FailurePolicy?
-      ├───── CONTINUE ───────> Dependents remain BLOCKED; Independent jobs continue
-      │
-      └───── HALT_SCHEDULER ──> SchedulerState = HALTED
-                                    │
-                            (Suspend new dispatches)
-                                    │
-                                 resume()
-                                    │
-                                    v
-                            SchedulerState = RUNNING
-                            (Re-evaluate & resume eligible jobs)
+Job (Definition)
+  └── RecurrencePolicy (e.g. FixedRateRecurrence: interval = 1m)
+        ├── JobExecution #1 (executionId: job-1#1, occurrence: 1)
+        ├── JobExecution #2 (executionId: job-1#2, occurrence: 2)
+        └── JobExecution #3 (executionId: job-1#3, occurrence: 3)
 ```

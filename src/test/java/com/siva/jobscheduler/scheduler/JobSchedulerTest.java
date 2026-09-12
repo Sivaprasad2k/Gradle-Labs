@@ -217,4 +217,69 @@ class JobSchedulerTest {
         assertFalse(jobBExecuted.get(), "Cancelled blocked job must never execute when dependency completes");
         assertEquals(JobStatus.CANCELLED, execB.getStatus());
     }
+
+    @Test
+    void testFixedRateRecurrenceExecution() {
+        Clock clock = Clock.systemUTC();
+        JobScheduler scheduler = new JobScheduler(clock);
+
+        AtomicInteger executionCounter = new AtomicInteger(0);
+        Instant now = clock.instant();
+
+        com.siva.jobscheduler.recurrence.FixedRateRecurrence recurrence =
+                new com.siva.jobscheduler.recurrence.FixedRateRecurrence(Duration.ofMillis(10), 3);
+
+        Job job = new Job("R1", "recurring-job", now, executionCounter::incrementAndGet, recurrence);
+        JobExecution exec = scheduler.registerJob(job);
+
+        assertEquals(JobStatus.SCHEDULED, exec.getStatus());
+        assertEquals("R1#1", exec.getExecutionId());
+        assertEquals(1, exec.getOccurrenceNumber());
+
+        scheduler.start();
+
+        assertEquals(3, executionCounter.get(), "Recurring job should execute exactly 3 times");
+        assertNotNull(scheduler.getRecurrenceState("R1"));
+        assertEquals(3, scheduler.getRecurrenceState("R1").getOccurrenceCount());
+        assertNotNull(scheduler.getExecutionByExecutionId("R1#3"));
+        assertEquals(JobStatus.COMPLETED, scheduler.getExecutionByExecutionId("R1#3").getStatus());
+    }
+
+    @Test
+    void testRecurrenceCancellationStopsFutureOccurrences() {
+        Clock clock = Clock.systemUTC();
+        JobScheduler scheduler = new JobScheduler(clock);
+
+        AtomicInteger count = new AtomicInteger(0);
+        Instant now = clock.instant();
+
+        com.siva.jobscheduler.recurrence.FixedRateRecurrence recurrence =
+                new com.siva.jobscheduler.recurrence.FixedRateRecurrence(Duration.ofMillis(10), 10);
+
+        Job job = new Job("R2", "recurring-cancel-job", now, () -> {
+            int current = count.incrementAndGet();
+            if (current == 2) {
+                scheduler.cancelRecurrence("R2");
+            }
+        }, recurrence);
+
+        scheduler.registerJob(job);
+        scheduler.start();
+
+        assertEquals(2, count.get(), "Should execute 2 times before recurrence schedule cancellation");
+        assertTrue(scheduler.getRecurrenceState("R2").isScheduleCancelled());
+    }
+
+    @Test
+    void testRecurrenceCoalescingMissedOccurrences() {
+        Clock clock = Clock.fixed(Instant.parse("2026-09-12T10:00:00Z"), ZoneId.of("UTC"));
+        com.siva.jobscheduler.recurrence.FixedRateRecurrence policy =
+                new com.siva.jobscheduler.recurrence.FixedRateRecurrence(Duration.ofMinutes(1));
+
+        Instant lastScheduled = Instant.parse("2026-09-12T10:00:00Z");
+        Instant now = Instant.parse("2026-09-12T10:03:30Z"); // Delayed past 10:01, 10:02, 10:03
+
+        Instant next = policy.calculateNextOccurrence(lastScheduled, now);
+        assertEquals(Instant.parse("2026-09-12T10:04:00Z"), next);
+    }
 }

@@ -13,6 +13,8 @@ import java.util.Objects;
  */
 public class JobExecution {
     private final Job job;
+    private final String executionId;
+    private final int occurrenceNumber;
     private JobStatus status;
     private Instant startedAt;
     private Instant completedAt;
@@ -20,14 +22,31 @@ public class JobExecution {
     private final List<ExecutionAttempt> attempts;
     private Instant currentAttemptStart;
 
-    public JobExecution(Job job) {
+    public JobExecution(Job job, int occurrenceNumber) {
         this.job = Objects.requireNonNull(job, "Job cannot be null");
+        if (occurrenceNumber < 1) {
+            throw new IllegalArgumentException("Occurrence number must be >= 1");
+        }
+        this.occurrenceNumber = occurrenceNumber;
+        this.executionId = job.id() + "#" + occurrenceNumber;
         this.status = job.dependencyIds().isEmpty() ? JobStatus.SCHEDULED : JobStatus.BLOCKED;
         this.attempts = new ArrayList<>();
     }
 
+    public JobExecution(Job job) {
+        this(job, 1);
+    }
+
     public Job getJob() {
         return job;
+    }
+
+    public String getExecutionId() {
+        return executionId;
+    }
+
+    public int getOccurrenceNumber() {
+        return occurrenceNumber;
     }
 
     public synchronized JobStatus getStatus() {
