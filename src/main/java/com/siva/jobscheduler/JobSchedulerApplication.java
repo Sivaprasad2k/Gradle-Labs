@@ -121,9 +121,18 @@ public class JobSchedulerApplication {
         Job jobB = new Job("B", "job-b-step2", now, () -> simulateWork(20), Set.of("A"));
 
         System.out.println("Registering jobs with persistent TaskType definitions...");
-        JobExecution execR1 = scheduler.registerJob(jobR1);
-        JobExecution execA = scheduler.registerJob(jobA, retryPolicy);
-        JobExecution execB = scheduler.registerJob(jobB);
+        JobExecution execR1 = scheduler.getExecution("R1");
+        if (execR1 == null) {
+            execR1 = scheduler.registerJob(jobR1);
+        }
+        JobExecution execA = scheduler.getExecution("A");
+        if (execA == null) {
+            execA = scheduler.registerJob(jobA, retryPolicy);
+        }
+        JobExecution execB = scheduler.getExecution("B");
+        if (execB == null) {
+            execB = scheduler.registerJob(jobB);
+        }
 
         System.out.println("Registered Job R1 (Persistent Recurring): " + jobR1.name() + " [Type: " + jobR1.taskType() + "]");
         System.out.println("Registered Job A (Workflow Prereq): " + jobA.name() + " [Initial: " + execA.getStatus() + "]");

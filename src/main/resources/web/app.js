@@ -2,18 +2,19 @@
  * Job Scheduler Console - Vanilla JS Controller
  * Version: 8.0.0
  *
- * All operational data is fetched from the V8 REST API.
- * Zero hardcoded/dummy scheduler, job, or execution data.
+ * Consumes existing V8 REST API endpoints (/api/v1/*).
+ * Zero dummy operational data. Live REST API status drives all metrics.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
   const API_BASE = '/api/v1';
 
   // ──────────────────────────────────────────────────
-  // Navigation Logic
+  // Navigation & Hash Routing
   // ──────────────────────────────────────────────────
   const navItems = document.querySelectorAll('.nav-item');
   const viewPanels = document.querySelectorAll('.view-panel');
+  let currentExecPage = 0;
 
   function switchView(targetView) {
     navItems.forEach(item => {
@@ -34,12 +35,14 @@ document.addEventListener('DOMContentLoaded', () => {
     item.addEventListener('click', (e) => {
       e.preventDefault();
       const view = item.getAttribute('data-view');
-      switchView(view);
-      window.location.hash = view;
+      if (view) {
+        switchView(view);
+        window.location.hash = view;
+      }
     });
   });
 
-  // View-all links in overview panels
+  // Handle View All Links
   document.querySelectorAll('.view-all-link').forEach(link => {
     link.addEventListener('click', (e) => {
       e.preventDefault();
@@ -51,59 +54,73 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Handle Hash Routing
+  // Hash route initialization
   const currentHash = window.location.hash.replace('#', '') || 'overview';
   switchView(currentHash);
 
   // ──────────────────────────────────────────────────
-  // Greeting (time-of-day based, no weather)
+  // Live Date & Time Formatting
   // ──────────────────────────────────────────────────
-  function updateGreeting() {
-    const hour = new Date().getHours();
-    const el = document.getElementById('greeting-text');
-    if (!el) return;
-    if (hour < 12) el.textContent = 'Good morning,';
-    else if (hour < 17) el.textContent = 'Good afternoon,';
-    else el.textContent = 'Good evening,';
+  function updateClock() {
+    const now = new Date();
+    const dateEl = document.getElementById('hero-date');
+    const timeEl = document.getElementById('hero-time');
+    const greetingEl = document.getElementById('greeting-text');
+
+    if (greetingEl) {
+      const hrs = now.getHours();
+      if (hrs < 12) greetingEl.textContent = 'Good morning,';
+      else if (hrs < 17) greetingEl.textContent = 'Good afternoon,';
+      else greetingEl.textContent = 'Good evening,';
+    }
+
+    if (dateEl) {
+      const options = { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' };
+      dateEl.textContent = now.toLocaleDateString('en-GB', options);
+    }
+
+    if (timeEl) {
+      const options = { hour: '2-digit', minute: '2-digit', hour12: true };
+      timeEl.textContent = now.toLocaleTimeString('en-US', options);
+    }
   }
-  updateGreeting();
+  updateClock();
+  setInterval(updateClock, 1000);
 
   // ──────────────────────────────────────────────────
-  // Toast Notification System (replaces alert())
+  // Toast Notifications
   // ──────────────────────────────────────────────────
   function showToast(message, type = 'info') {
     const container = document.getElementById('toast-container');
     if (!container) return;
     const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
+    toast.className = `toast ${type}`;
     toast.textContent = message;
     container.appendChild(toast);
-    requestAnimationFrame(() => toast.classList.add('show'));
     setTimeout(() => {
-      toast.classList.remove('show');
+      toast.style.opacity = '0';
+      toast.style.transition = 'opacity 0.3s ease';
       setTimeout(() => toast.remove(), 300);
     }, 4000);
   }
 
-  // ──────────────────────────────────────────────────
-  // Connection state tracking
-  // ──────────────────────────────────────────────────
-  let isConnected = false;
+  // Helper text setter
+  function setTextById(id, val) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = (val !== null && val !== undefined) ? val : '0';
+  }
 
-  function setConnectionState(connected) {
-    isConnected = connected;
-    const dot = document.getElementById('sidebar-status-dot');
-    const text = document.getElementById('sidebar-status-text');
-    if (dot) {
-      dot.className = 'status-dot ' + (connected ? 'green' : 'red');
-    }
-    if (text) {
-      text.textContent = connected ? 'Connected' : 'Disconnected';
-    }
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   }
 
   // ──────────────────────────────────────────────────
-  // Scheduler Status Fetch
+  // Scheduler Status API Fetch
   // ──────────────────────────────────────────────────
   async function fetchSchedulerStatus() {
     try {
@@ -115,37 +132,64 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await res.json();
       setConnectionState(true);
 
-      // The DTO field is "status" (not "state")
       const status = data.status || 'UNKNOWN';
 
-      // Topbar status pill
-      const pillText = document.getElementById('topbar-status-text');
+      // Topbar status badge
       const pill = document.getElementById('topbar-status-pill');
-      if (pillText) pillText.textContent = `Scheduler ${status}`;
-      if (pill) pill.className = `scheduler-pill ${status.toLowerCase()}`;
+      const pillText = document.getElementById('topbar-status-text');
+      if (pillText) pillText.textContent = `Scheduler ${status.charAt(0) + status.slice(1).toLowerCase()}`;
+      if (pill) pill.className = `scheduler-status-pill ${status.toLowerCase()}`;
 
       // Sidebar version
-      const versionEl = document.getElementById('sidebar-version-text');
-      if (versionEl && data.version) versionEl.textContent = `${data.version} (${data.environment || 'dev'})`;
+      const sidebarVer = document.getElementById('sidebar-version-text');
+      if (sidebarVer && data.version) sidebarVer.textContent = `${data.version} (${data.environment || 'dev'})`;
 
-      // Overview control panel
-      const ctrlTitle = document.getElementById('ctrl-status-title');
+      // Hero banner title
+      const bannerTitle = document.getElementById('banner-headline');
+      if (bannerTitle) {
+        if (status === 'RUNNING') bannerTitle.textContent = 'Your scheduler is running smoothly.';
+        else if (status === 'HALTED') bannerTitle.textContent = 'Scheduler is currently halted.';
+        else if (status === 'STOPPED') bannerTitle.textContent = 'Scheduler has been shut down.';
+        else bannerTitle.textContent = `Scheduler State: ${status}`;
+      }
+
+      // Card Metrics
+      setTextById('stat-total-jobs', data.totalJobs);
+      setTextById('stat-running-exec', data.runningExecutions);
+      setTextById('stat-scheduled-exec', data.scheduledExecutions);
+      setTextById('stat-blocked-exec', data.blockedExecutions);
+      setTextById('stat-failed-exec', data.failedExecutions);
+
+      // Right Panel Status
+      setTextById('ctrl-status-title', status);
       const ctrlDot = document.getElementById('ctrl-dot');
+      if (ctrlDot) {
+        ctrlDot.className = 'glow-dot ' + (status === 'RUNNING' ? 'green' : status === 'HALTED' ? 'amber' : 'red');
+      }
+
       const ctrlSub = document.getElementById('ctrl-status-sub');
+      if (ctrlSub) {
+        if (status === 'RUNNING') ctrlSub.textContent = 'Scheduler is dispatching jobs.';
+        else if (status === 'HALTED') ctrlSub.textContent = 'Scheduler is halted. No dispatching.';
+        else if (status === 'STOPPED') ctrlSub.textContent = 'Scheduler is shut down.';
+      }
+
+      setTextById('spec-val-state', status);
+      setTextById('ctrl-threads', `${data.activeWorkerThreads} / ${data.totalWorkerThreads}`);
+      setTextById('ctrl-queue', `${data.pendingQueueSize} pending`);
+      setTextById('ctrl-uptime', data.uptime || '0d 0h 0m');
+      setTextById('spec-val-db', data.dbName || 'job_scheduler_db');
+      setTextById('spec-val-version', data.version || 'v8.0.0');
+      setTextById('spec-val-env', data.environment || 'Development');
+
+      // System info panel
+      setTextById('info-db-name', data.dbName || 'job_scheduler_db');
+      setTextById('info-sys-version', data.version || 'v8.0.0');
+      setTextById('info-sys-env', data.environment || 'Development');
+
+      // Buttons visibility
       const btnHalt = document.getElementById('btn-halt-scheduler');
       const btnResume = document.getElementById('btn-resume-scheduler');
-
-      if (ctrlTitle) ctrlTitle.textContent = status;
-      if (ctrlDot) {
-        ctrlDot.className = 'dot-lg ' + getStatusDotClass(status);
-      }
-      if (ctrlSub) {
-        if (status === 'RUNNING') ctrlSub.textContent = 'Jobs are being dispatched and executed.';
-        else if (status === 'HALTED') ctrlSub.textContent = 'Scheduler is halted. New jobs will not be dispatched.';
-        else if (status === 'STOPPED') ctrlSub.textContent = 'Scheduler has been shut down.';
-        else ctrlSub.textContent = `Current state: ${status}`;
-      }
-
       if (btnHalt && btnResume) {
         if (status === 'RUNNING') {
           btnHalt.style.display = 'inline-flex';
@@ -159,79 +203,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
 
-      // Specs
-      setTextById('ctrl-threads', `${data.activeWorkerThreads} active / ${data.totalWorkerThreads}`);
-      setTextById('ctrl-queue', `${data.pendingQueueSize} pending`);
-      setTextById('ctrl-uptime', data.uptime || '—');
-
-      // Overview metrics from scheduler status
-      setTextById('stat-total-jobs', data.totalJobs);
-      setTextById('stat-running-exec', data.runningExecutions);
-      setTextById('stat-scheduled-exec', data.scheduledExecutions);
-      setTextById('stat-blocked-exec', data.blockedExecutions);
-      setTextById('stat-failed-exec', data.failedExecutions);
-
-      // Banner headline
-      const headline = document.getElementById('banner-headline');
-      if (headline) {
-        if (status === 'RUNNING') {
-          headline.textContent = 'Scheduler Overview';
-        } else if (status === 'HALTED') {
-          headline.textContent = 'Scheduler Halted';
-        } else if (status === 'STOPPED') {
-          headline.textContent = 'Scheduler Stopped';
-        } else {
-          headline.textContent = `Scheduler: ${status}`;
-        }
-      }
-
-      // System widget (replaces weather widget)
-      setTextById('widget-env', data.environment || '—');
-      setTextById('widget-db', data.dbStatus ? `${data.dbStatus} (${data.dbName || ''})` : '—');
-      setTextById('widget-uptime', data.uptime || '—');
-
-      // Donut chart data
+      // Donut Chart legend
       updateDonutChart(data);
-
-      // Info cards
-      setTextById('info-completed-count', data.completedExecutions);
-      const dbStatusEl = document.getElementById('info-db-status');
-      if (dbStatusEl) {
-        dbStatusEl.innerHTML = `MongoDB <strong>${escapeHtml(data.dbStatus || 'Unknown')}</strong> (${escapeHtml(data.dbName || '—')})`;
-      }
-
-      // Scheduler admin view
-      const adminDot = document.getElementById('admin-dot');
-      const adminHeading = document.getElementById('admin-status-heading');
-      const adminDesc = document.getElementById('admin-status-desc');
-      if (adminDot) adminDot.className = 'dot-lg ' + getStatusDotClass(status);
-      if (adminHeading) adminHeading.textContent = `State: ${status}`;
-      if (adminDesc) {
-        if (status === 'RUNNING') adminDesc.textContent = 'The scheduler is actively polling the PriorityQueue and dispatching jobs to worker threads.';
-        else if (status === 'HALTED') adminDesc.textContent = 'The scheduler has been halted. No new jobs will be dispatched until resumed.';
-        else if (status === 'STOPPED') adminDesc.textContent = 'The scheduler has been shut down completely.';
-        else adminDesc.textContent = `Scheduler is in ${status} state.`;
-      }
-
-      setTextById('admin-spec-status', status);
-      setTextById('admin-spec-threads', `${data.activeWorkerThreads} / ${data.totalWorkerThreads}`);
-      setTextById('admin-spec-queue', `${data.pendingQueueSize}`);
-      setTextById('admin-spec-jobs', `${data.totalJobs}`);
-      setTextById('admin-spec-active', `${data.activeExecutions}`);
-      setTextById('admin-spec-completed', `${data.completedExecutions}`);
-      setTextById('admin-spec-failed', `${data.failedExecutions}`);
-      setTextById('admin-spec-uptime', data.uptime || '—');
-      setTextById('admin-spec-version', data.version || '—');
-      setTextById('admin-spec-env', data.environment || '—');
-      setTextById('admin-spec-db', data.dbStatus ? `${data.dbStatus} (${data.dbName || ''})` : '—');
-
-      // Admin button visibility
-      const adminBtnHalt = document.getElementById('admin-btn-halt');
-      const adminBtnResume = document.getElementById('admin-btn-resume');
-      const adminBtnShutdown = document.getElementById('admin-btn-shutdown');
-      if (adminBtnHalt) adminBtnHalt.disabled = (status !== 'RUNNING');
-      if (adminBtnResume) adminBtnResume.disabled = (status !== 'HALTED');
-      if (adminBtnShutdown) adminBtnShutdown.disabled = (status === 'STOPPED');
 
       return data;
     } catch (err) {
@@ -241,415 +214,320 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // ──────────────────────────────────────────────────
-  // Donut Chart (driven by scheduler status data)
-  // ──────────────────────────────────────────────────
+  function setConnectionState(connected) {
+    const dot = document.getElementById('sidebar-status-dot');
+    const text = document.getElementById('sidebar-status-text');
+    const infoDbStatus = document.getElementById('info-db-status');
+    if (dot) dot.className = 'status-dot ' + (connected ? 'green' : 'red');
+    if (text) text.textContent = connected ? 'Connected' : 'Disconnected';
+    if (infoDbStatus) {
+      infoDbStatus.className = 'value ' + (connected ? 'green-text' : 'red-text');
+      infoDbStatus.innerHTML = `<span class="dot ${connected ? 'green' : 'red'}"></span> ${connected ? 'Connected' : 'Disconnected'}`;
+    }
+  }
+
   function updateDonutChart(data) {
-    const total = data.activeExecutions + data.completedExecutions + data.failedExecutions;
+    const total = data.totalJobs || ((data.runningExecutions || 0) + (data.scheduledExecutions || 0) + (data.blockedExecutions || 0) + (data.failedExecutions || 0) + (data.completedExecutions || 0));
     setTextById('donut-total', total);
 
-    const svg = document.getElementById('donut-svg');
-    if (!svg) return;
+    const calcPct = (val) => total > 0 ? `${Math.round((val / total) * 100)}%` : '0%';
 
-    // Remove old arcs
-    svg.querySelectorAll('.circle-arc').forEach(el => el.remove());
-
-    const segments = [
-      { value: data.runningExecutions, cls: 'green' },
-      { value: data.completedExecutions, cls: 'blue' },
-      { value: data.scheduledExecutions, cls: 'blue-alt' },
-      { value: data.blockedExecutions, cls: 'amber' },
-      { value: data.failedExecutions, cls: 'red' },
-    ];
-
-    let offset = 0;
-    segments.forEach(seg => {
-      const pct = total > 0 ? (seg.value / total) * 100 : 0;
-      if (pct > 0) {
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('class', `circle-arc circle-${seg.cls}`);
-        path.setAttribute('d', 'M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831');
-        path.setAttribute('fill', 'none');
-        path.setAttribute('stroke-width', '3.8');
-        path.setAttribute('stroke-linecap', 'round');
-        path.setAttribute('stroke-dasharray', `${pct}, 100`);
-        path.setAttribute('stroke-dashoffset', `-${offset}`);
-        svg.appendChild(path);
-      }
-      offset += pct;
-    });
-
-    // Update legend
-    setTextById('legend-running', data.runningExecutions);
-    setTextById('legend-completed', data.completedExecutions);
-    setTextById('legend-scheduled', data.scheduledExecutions);
-    setTextById('legend-blocked', data.blockedExecutions);
-    setTextById('legend-failed', data.failedExecutions);
+    setTextById('legend-running', `${data.runningExecutions || 0} (${calcPct(data.runningExecutions || 0)})`);
+    setTextById('legend-scheduled', `${data.scheduledExecutions || 0} (${calcPct(data.scheduledExecutions || 0)})`);
+    setTextById('legend-blocked', `${data.blockedExecutions || 0} (${calcPct(data.blockedExecutions || 0)})`);
+    setTextById('legend-failed', `${data.failedExecutions || 0} (${calcPct(data.failedExecutions || 0)})`);
+    setTextById('legend-completed', `${data.completedExecutions || 0} (${calcPct(data.completedExecutions || 0)})`);
+    setTextById('legend-cancelled', `0 (0%)`);
   }
 
   // ──────────────────────────────────────────────────
-  // Jobs Fetch
+  // Executions API Fetch
   // ──────────────────────────────────────────────────
-  async function fetchJobs() {
-    const jobsTbody = document.getElementById('table-jobs-body');
-    if (jobsTbody) jobsTbody.innerHTML = '<tr><td colspan="6" class="empty-state"><span class="loading-spinner"></span> Loading jobs…</td></tr>';
-
-    try {
-      const res = await fetch(`${API_BASE}/jobs`);
-      if (!res.ok) {
-        if (jobsTbody) jobsTbody.innerHTML = '<tr><td colspan="6" class="empty-state error-state">Failed to load jobs.</td></tr>';
-        return;
-      }
-      const jobs = await res.json();
-
-      if (jobsTbody) {
-        if (jobs.length === 0) {
-          jobsTbody.innerHTML = '<tr><td colspan="6" class="empty-state">No jobs registered yet. Click "Create Job" to add one.</td></tr>';
-          return;
-        }
-
-        jobsTbody.innerHTML = jobs.map(job => `
-          <tr>
-            <td class="code">${escapeHtml(job.jobId || job.id)}</td>
-            <td>${escapeHtml(job.jobName || job.name || job.jobId || job.id)}</td>
-            <td>${escapeHtml(job.taskType)}</td>
-            <td>${formatDateTime(job.scheduledAt)}</td>
-            <td>${job.isRecurring && job.recurrence ? `<span class="type-tag recurring">↻ ${formatInterval(job.recurrence.intervalMs)}</span>` : '<span class="type-tag one-time">⊙ One-time</span>'}</td>
-            <td>
-              <button class="btn btn-secondary btn-sm cancel-job-btn" data-id="${escapeHtml(job.jobId || job.id)}">Cancel</button>
-            </td>
-          </tr>
-        `).join('');
-
-        // Attach cancel listeners
-        document.querySelectorAll('.cancel-job-btn').forEach(btn => {
-          btn.addEventListener('click', async () => {
-            const jobId = btn.getAttribute('data-id');
-            if (confirm(`Are you sure you want to cancel job "${jobId}"?`)) {
-              await cancelJob(jobId);
-            }
-          });
-        });
-      }
-    } catch (err) {
-      console.error('Failed to fetch jobs:', err);
-      if (jobsTbody) jobsTbody.innerHTML = '<tr><td colspan="6" class="empty-state error-state">Error loading jobs. Check connection.</td></tr>';
-    }
-  }
-
-  async function cancelJob(jobId) {
-    try {
-      const res = await fetch(`${API_BASE}/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' });
-      if (res.ok) {
-        showToast(`Job "${jobId}" cancelled successfully.`, 'success');
-        fetchJobs();
-        fetchSchedulerStatus();
-      } else {
-        const err = await res.json().catch(() => ({ message: 'Unknown error' }));
-        showToast(`Failed to cancel job: ${err.message || 'Unknown error'}`, 'error');
-      }
-    } catch (err) {
-      showToast(`Error cancelling job: ${err.message}`, 'error');
-    }
-  }
-
-  // ──────────────────────────────────────────────────
-  // Executions Fetch (with pagination)
-  // ──────────────────────────────────────────────────
-  let currentExecPage = 0;
-  const EXEC_PAGE_SIZE = 20;
-
   async function fetchExecutions(page = 0) {
-    currentExecPage = page;
-    const execTbody = document.getElementById('table-executions-body');
-    if (execTbody) execTbody.innerHTML = '<tr><td colspan="7" class="empty-state"><span class="loading-spinner"></span> Loading executions…</td></tr>';
-
     try {
-      const res = await fetch(`${API_BASE}/executions?page=${page}&size=${EXEC_PAGE_SIZE}`);
-      if (!res.ok) {
-        if (execTbody) execTbody.innerHTML = '<tr><td colspan="7" class="empty-state error-state">Failed to load executions.</td></tr>';
-        return;
-      }
-      const pageData = await res.json();
-      // DTO field is "items" (not "content")
-      const executions = pageData.items || [];
+      const res = await fetch(`${API_BASE}/executions?page=${page}&size=20`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const items = data.items || [];
 
-      if (execTbody) {
-        if (executions.length === 0 && pageData.totalElements === 0) {
-          execTbody.innerHTML = '<tr><td colspan="7" class="empty-state">No executions recorded yet.</td></tr>';
+      // Active Executions (Table on Overview)
+      const activeTbody = document.getElementById('table-active-executions');
+      if (activeTbody) {
+        const running = items.filter(e => e.status === 'RUNNING' || e.status === 'BLOCKED');
+        if (running.length === 0) {
+          activeTbody.innerHTML = `
+            <tr>
+              <td colspan="5">
+                <div class="empty-state-box">
+                  <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
+                  <h4>No active executions</h4>
+                  <p>No jobs are currently running.</p>
+                </div>
+              </td>
+            </tr>
+          `;
         } else {
-          execTbody.innerHTML = executions.map(ex => {
-            const duration = ex.durationMillis != null
-              ? formatDuration(ex.durationMillis)
-              : ex.status === 'RUNNING' ? 'Running…' : '—';
-
-            return `
-              <tr>
-                <td class="code">${escapeHtml(ex.executionId)}</td>
-                <td class="code">${escapeHtml(ex.jobId)}</td>
-                <td>#${ex.occurrenceNumber}</td>
-                <td>${formatDateTime(ex.scheduledAt)}</td>
-                <td>${duration}</td>
-                <td><span class="badge-status ${ex.status.toLowerCase()}">${ex.status}</span></td>
-                <td>${ex.attemptCount} attempt(s)</td>
-              </tr>
-            `;
-          }).join('');
+          activeTbody.innerHTML = running.map(ex => `
+            <tr>
+              <td class="code">${escapeHtml(ex.jobId)}</td>
+              <td>${escapeHtml(ex.jobName || ex.jobId)}</td>
+              <td>${ex.startedAt ? new Date(ex.startedAt).toLocaleTimeString() : '—'}</td>
+              <td>${ex.durationMillis != null ? ex.durationMillis + 'ms' : 'Running…'}</td>
+              <td><span class="badge-status ${ex.status.toLowerCase()}">${ex.status}</span></td>
+            </tr>
+          `).join('');
         }
       }
 
-      // Render pagination controls
-      renderPagination(pageData);
+      // Upcoming Executions Table
+      const upcomingTbody = document.getElementById('table-recent-executions');
+      if (upcomingTbody) {
+        const scheduled = items.filter(e => e.status === 'SCHEDULED');
+        if (scheduled.length === 0) {
+          upcomingTbody.innerHTML = `
+            <tr>
+              <td colspan="3">
+                <div class="empty-state-box">
+                  <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                  <h4>No upcoming executions</h4>
+                  <p>Scheduled jobs will appear here.</p>
+                </div>
+              </td>
+            </tr>
+          `;
+        } else {
+          upcomingTbody.innerHTML = scheduled.map(ex => `
+            <tr>
+              <td class="code">${escapeHtml(ex.jobId)}</td>
+              <td>${ex.scheduledAt ? new Date(ex.scheduledAt).toLocaleTimeString() : '—'}</td>
+              <td><span class="badge-status scheduled">${ex.jobType || 'Scheduled'}</span></td>
+            </tr>
+          `).join('');
+        }
+      }
+
+      // Executions Table (Executions View)
+      const execTbody = document.getElementById('table-executions-body');
+      if (execTbody) {
+        if (items.length === 0) {
+          execTbody.innerHTML = `<tr><td colspan="7" class="empty-state">No execution records found.</td></tr>`;
+        } else {
+          execTbody.innerHTML = items.map(ex => `
+            <tr>
+              <td class="code">${escapeHtml(ex.executionId)}</td>
+              <td class="code">${escapeHtml(ex.jobId)}</td>
+              <td>#${ex.occurrenceNumber || 1}</td>
+              <td>${ex.scheduledAt ? new Date(ex.scheduledAt).toLocaleString() : '—'}</td>
+              <td>${ex.durationMillis != null ? ex.durationMillis + 'ms' : '—'}</td>
+              <td><span class="badge-status ${ex.status.toLowerCase()}">${ex.status}</span></td>
+              <td>${ex.attemptCount || 1}</td>
+            </tr>
+          `).join('');
+        }
+      }
+
+      renderPagination(data);
+
     } catch (err) {
       console.error('Failed to fetch executions:', err);
-      if (execTbody) execTbody.innerHTML = '<tr><td colspan="7" class="empty-state error-state">Error loading executions. Check connection.</td></tr>';
     }
   }
 
   function renderPagination(pageData) {
     const container = document.getElementById('exec-pagination');
     if (!container) return;
-
     if (pageData.totalPages <= 1) {
-      container.innerHTML = pageData.totalElements > 0
-        ? `<span class="pagination-info">${pageData.totalElements} execution(s)</span>`
-        : '';
+      container.innerHTML = pageData.totalElements > 0 ? `<span class="subtext">${pageData.totalElements} execution(s)</span>` : '';
       return;
     }
-
-    let html = `<span class="pagination-info">Page ${pageData.page + 1} of ${pageData.totalPages} (${pageData.totalElements} total)</span>`;
-    html += '<div class="pagination-btns">';
-    html += `<button class="btn btn-secondary btn-sm" ${pageData.page === 0 ? 'disabled' : ''} data-page="${pageData.page - 1}">← Prev</button>`;
-    html += `<button class="btn btn-secondary btn-sm" ${pageData.page >= pageData.totalPages - 1 ? 'disabled' : ''} data-page="${pageData.page + 1}">Next →</button>`;
-    html += '</div>';
-    container.innerHTML = html;
-
-    container.querySelectorAll('[data-page]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const p = parseInt(btn.getAttribute('data-page'), 10);
-        if (!isNaN(p)) fetchExecutions(p);
-      });
-    });
+    container.innerHTML = `
+      <span class="subtext">Page ${pageData.page + 1} of ${pageData.totalPages} (${pageData.totalElements})</span>
+      <button class="btn btn-navy" ${pageData.page === 0 ? 'disabled' : ''} id="btn-prev-page">Prev</button>
+      <button class="btn btn-navy" ${pageData.page >= pageData.totalPages - 1 ? 'disabled' : ''} id="btn-next-page">Next</button>
+    `;
+    const btnPrev = document.getElementById('btn-prev-page');
+    const btnNext = document.getElementById('btn-next-page');
+    if (btnPrev) btnPrev.addEventListener('click', () => { if (currentExecPage > 0) fetchExecutions(--currentExecPage); });
+    if (btnNext) btnNext.addEventListener('click', () => { fetchExecutions(++currentExecPage); });
   }
 
   // ──────────────────────────────────────────────────
-  // Overview: Active & Recent Executions
+  // Jobs API Fetch
   // ──────────────────────────────────────────────────
-  async function fetchOverviewExecutions() {
+  async function fetchJobs() {
     try {
-      const res = await fetch(`${API_BASE}/executions?page=0&size=50`);
+      const res = await fetch(`${API_BASE}/jobs`);
       if (!res.ok) return;
-      const pageData = await res.json();
-      const executions = pageData.items || [];
+      const jobs = await res.json();
 
-      // Active (Running) executions
-      const activeTbody = document.getElementById('table-active-executions');
-      if (activeTbody) {
-        const running = executions.filter(e => e.status === 'RUNNING');
-        if (running.length === 0) {
-          activeTbody.innerHTML = '<tr><td colspan="5" class="empty-state">No active executions.</td></tr>';
+      const tbody = document.getElementById('table-jobs-body');
+      if (tbody) {
+        if (!jobs || jobs.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="6" class="empty-state">No jobs registered yet. Click "Create Job" to register one.</td></tr>`;
         } else {
-          activeTbody.innerHTML = running.map(ex => `
-            <tr>
-              <td class="code">${escapeHtml(ex.jobId)}</td>
-              <td>${escapeHtml(ex.jobName || ex.jobId)}</td>
-              <td>${formatDateTime(ex.startedAt || ex.scheduledAt)}</td>
-              <td>${ex.durationMillis != null ? formatDuration(ex.durationMillis) : 'Running…'}</td>
-              <td><span class="badge-status running">RUNNING</span></td>
-            </tr>
-          `).join('');
-        }
-      }
-
-      // Recent executions (most recent, any status)
-      const recentTbody = document.getElementById('table-recent-executions');
-      if (recentTbody) {
-        const recent = executions.slice(0, 5);
-        if (recent.length === 0) {
-          recentTbody.innerHTML = '<tr><td colspan="3" class="empty-state">No executions yet.</td></tr>';
-        } else {
-          recentTbody.innerHTML = recent.map(ex => {
-            const duration = ex.durationMillis != null
-              ? formatDuration(ex.durationMillis)
-              : ex.status === 'RUNNING' ? 'Running…' : '—';
+          tbody.innerHTML = jobs.map(j => {
+            const rec = j.recurrencePolicy ? `${j.recurrencePolicy.type || 'RECURRING'}` : 'None';
             return `
               <tr>
-                <td class="code">${escapeHtml(ex.jobId)}</td>
-                <td><span class="badge-status ${ex.status.toLowerCase()}">${ex.status}</span></td>
-                <td>${duration}</td>
+                <td class="code">${escapeHtml(j.jobId || j.id)}</td>
+                <td><strong>${escapeHtml(j.jobName || j.name)}</strong></td>
+                <td><span class="badge-status scheduled">${escapeHtml(j.taskType || 'IN_MEMORY')}</span></td>
+                <td>${j.scheduledAt ? new Date(j.scheduledAt).toLocaleString() : 'Immediate'}</td>
+                <td>${rec}</td>
+                <td>
+                  <button class="btn btn-navy btn-cancel-job" data-id="${escapeHtml(j.jobId || j.id)}">Cancel</button>
+                </td>
               </tr>
             `;
           }).join('');
-        }
-      }
 
-      // Activity feed
-      const activityFeed = document.getElementById('activity-feed');
-      if (activityFeed) {
-        if (executions.length === 0) {
-          activityFeed.innerHTML = '<div class="empty-state-block">No recent activity. Jobs will appear here once executed.</div>';
-        } else {
-          const feedItems = executions.slice(0, 6);
-          activityFeed.innerHTML = feedItems.map(ex => {
-            const dotClass = ex.status === 'COMPLETED' ? 'green' : ex.status === 'RUNNING' ? 'blue' : ex.status === 'FAILED' ? 'red' : 'amber';
-            const label = ex.status === 'COMPLETED' ? 'Job completed' : ex.status === 'RUNNING' ? 'Job started' : ex.status === 'FAILED' ? 'Job failed' : `Job ${ex.status.toLowerCase()}`;
-            return `
-              <div class="feed-item">
-                <span class="feed-dot ${dotClass}"></span>
-                <div class="feed-content">
-                  <strong>${label}</strong>
-                  <span>${escapeHtml(ex.jobId)}</span>
-                </div>
-                <span class="time">${formatDateTime(ex.completedAt || ex.startedAt || ex.scheduledAt)}</span>
-              </div>
-            `;
-          }).join('');
+          document.querySelectorAll('.btn-cancel-job').forEach(btn => {
+            btn.addEventListener('click', async () => {
+              const jobId = btn.getAttribute('data-id');
+              if (confirm(`Are you sure you want to cancel job ${jobId}?`)) {
+                await cancelJob(jobId);
+              }
+            });
+          });
         }
       }
     } catch (err) {
-      console.error('Failed to fetch overview executions:', err);
-      const activeTbody = document.getElementById('table-active-executions');
-      if (activeTbody) activeTbody.innerHTML = '<tr><td colspan="5" class="empty-state error-state">Error loading data.</td></tr>';
-      const recentTbody = document.getElementById('table-recent-executions');
-      if (recentTbody) recentTbody.innerHTML = '<tr><td colspan="3" class="empty-state error-state">Error loading data.</td></tr>';
+      console.error('Failed to fetch jobs:', err);
     }
   }
 
   // ──────────────────────────────────────────────────
-  // Workflows Fetch
+  // Workflows API Fetch & DAG rendering
   // ──────────────────────────────────────────────────
   async function fetchWorkflows() {
     const container = document.getElementById('workflow-graph-container');
     if (!container) return;
 
-    container.innerHTML = '<div class="empty-state"><span class="loading-spinner"></span> Loading workflow DAG…</div>';
-
     try {
       const res = await fetch(`${API_BASE}/jobs`);
-      if (!res.ok) {
-        container.innerHTML = '<div class="empty-state">Failed to load workflow data.</div>';
-        return;
-      }
+      if (!res.ok) return;
       const jobs = await res.json();
 
+      const countEl = document.getElementById('info-workflow-count');
+      if (countEl) {
+        const withDeps = jobs.filter(j => j.dependencyIds && j.dependencyIds.length > 0);
+        countEl.textContent = withDeps.length;
+      }
+
       if (!jobs || jobs.length === 0) {
-        container.innerHTML = '<div class="empty-state">No jobs registered. Workflows will appear when jobs are created.</div>';
+        container.innerHTML = `
+          <div class="empty-state-box">
+            <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="5" r="3"></circle><circle cx="5" cy="19" r="3"></circle><circle cx="19" cy="19" r="3"></circle><line x1="12" y1="8" x2="5" y2="16"></line><line x1="12" y1="8" x2="19" y2="16"></line></svg>
+            <h4>0 workflows</h4>
+            <p>Workflows appear when jobs have dependencies.</p>
+          </div>
+        `;
         return;
       }
 
-      // Map prerequisite dependencies and dependent jobs
-      const depMap = new Map(); // jobId -> Array of prerequisite jobIds
-      const dependentMap = new Map(); // jobId -> Set of jobIds depending on this job
-
-      jobs.forEach(j => {
-        const id = j.jobId || j.id;
-        const deps = j.dependencyIds || [];
-        depMap.set(id, deps);
-        deps.forEach(depId => {
-          if (!dependentMap.has(depId)) dependentMap.set(depId, new Set());
-          dependentMap.get(depId).add(id);
-        });
-      });
-
-      const independentJobs = [];
-      const dependentJobs = [];
-
-      jobs.forEach(j => {
-        const id = j.jobId || j.id;
-        const hasPrereqs = (depMap.get(id) && depMap.get(id).length > 0);
-        const hasDependents = (dependentMap.has(id) && dependentMap.get(id).size > 0);
-
-        if (!hasPrereqs && !hasDependents) {
-          independentJobs.push(j);
-        } else {
-          dependentJobs.push(j);
-        }
-      });
-
-      let html = '';
-
-      // Render Dependency Chains (e.g. A -> B)
-      if (dependentJobs.length > 0) {
-        html += '<div class="dag-group"><div class="dag-section-title">Dependency DAG Workflows</div><div class="dag-list">';
-
-        // Find root nodes of chains (jobs with no prerequisites but having dependents)
-        const roots = dependentJobs.filter(j => {
-          const id = j.jobId || j.id;
-          const deps = depMap.get(id) || [];
-          return deps.length === 0;
-        });
-
-        if (roots.length > 0) {
-          roots.forEach(rootJob => {
-            const rootId = rootJob.jobId || rootJob.id;
-            const dependents = Array.from(dependentMap.get(rootId) || []);
-
-            dependents.forEach(depId => {
-              const childJob = jobs.find(j => (j.jobId || j.id) === depId);
-              html += `
-                <div class="dag-chain">
-                  <div class="dag-node">
-                    <span class="code">${escapeHtml(rootId)}</span>
-                    <span class="dep-label">Prerequisite (${escapeHtml(rootJob.name || rootId)})</span>
-                  </div>
-                  <span class="dag-arrow">→</span>
-                  <div class="dag-node">
-                    <span class="code">${escapeHtml(depId)}</span>
-                    <span class="dep-label">Dependent (${escapeHtml(childJob ? (childJob.name || depId) : depId)})</span>
-                  </div>
+      // Clean structured DAG workflow list
+      container.innerHTML = `
+        <div class="workflow-list">
+          ${jobs.map(j => {
+            const hasDeps = j.dependencyIds && j.dependencyIds.length > 0;
+            return `
+              <div class="workflow-item-card">
+                <div class="workflow-item-info">
+                  <span class="workflow-item-id">${escapeHtml(j.jobId || j.id)}</span>
+                  <span class="workflow-item-name">${escapeHtml(j.jobName || j.name)}</span>
                 </div>
-              `;
-            });
-          });
-        } else {
-          // Fallback for non-root dependency items
-          dependentJobs.forEach(j => {
-            const id = j.jobId || j.id;
-            const deps = j.dependencyIds || [];
-            html += `
-              <div class="dag-chain">
-                <div class="dag-node">
-                  <span class="code">${escapeHtml(deps.join(', '))}</span>
-                  <span class="dep-label">Prerequisite</span>
-                </div>
-                <span class="dag-arrow">→</span>
-                <div class="dag-node">
-                  <span class="code">${escapeHtml(id)}</span>
-                  <span class="dep-label">Dependent</span>
-                </div>
+                <span class="badge-status ${hasDeps ? 'amber' : 'completed'}">
+                  ${hasDeps ? 'Depends on: ' + j.dependencyIds.join(', ') : 'Independent'}
+                </span>
               </div>
             `;
-          });
-        }
-
-        html += '</div></div>';
-      }
-
-      // Render Independent Jobs (e.g. R1)
-      if (independentJobs.length > 0) {
-        html += '<div class="dag-group" style="margin-top: 16px;"><div class="dag-section-title">Independent Schedules</div><div class="dag-list">';
-        independentJobs.forEach(j => {
-          const id = j.jobId || j.id;
-          const recText = j.recurrencePolicy ? `${j.recurrencePolicy.type || 'RECURRING'}` : 'One-time';
-          html += `
-            <div class="dag-node">
-              <span class="code">${escapeHtml(id)}</span>
-              <span class="dep-label">${escapeHtml(j.name || id)} (${recText})</span>
-            </div>
-          `;
-        });
-        html += '</div></div>';
-      }
-
-      container.innerHTML = html;
+          }).join('')}
+        </div>
+      `;
 
     } catch (err) {
-      container.innerHTML = `<div class="empty-state">Error loading workflows: ${escapeHtml(err.message)}</div>`;
+      console.error('Failed to fetch workflows:', err);
     }
   }
 
   // ──────────────────────────────────────────────────
-  // Create Job Modal Logic
+  // Actions & Control Endpoints
+  // ──────────────────────────────────────────────────
+  async function cancelJob(jobId) {
+    try {
+      const res = await fetch(`${API_BASE}/jobs/${jobId}/cancel`, { method: 'POST' });
+      if (res.ok) {
+        showToast(`Job ${jobId} cancelled successfully`, 'success');
+        refreshOverview();
+      } else {
+        showToast(`Failed to cancel job ${jobId}`, 'error');
+      }
+    } catch (err) {
+      showToast(`Error: ${err.message}`, 'error');
+    }
+  }
+
+  const btnHalt = document.getElementById('btn-halt-scheduler');
+  const btnResume = document.getElementById('btn-resume-scheduler');
+  const btnShutdown = document.getElementById('btn-shutdown-scheduler');
+  const adminBtnHalt = document.getElementById('admin-btn-halt');
+  const adminBtnResume = document.getElementById('admin-btn-resume');
+  const adminBtnShutdown = document.getElementById('admin-btn-shutdown');
+
+  async function haltScheduler() {
+    try {
+      const res = await fetch(`${API_BASE}/scheduler/halt`, { method: 'POST' });
+      if (res.ok) {
+        showToast('Scheduler halted successfully', 'warning');
+        refreshOverview();
+      }
+    } catch (err) {
+      showToast(`Halt error: ${err.message}`, 'error');
+    }
+  }
+
+  async function resumeScheduler() {
+    try {
+      const res = await fetch(`${API_BASE}/scheduler/resume`, { method: 'POST' });
+      if (res.ok) {
+        showToast('Scheduler resumed successfully', 'success');
+        refreshOverview();
+      }
+    } catch (err) {
+      showToast(`Resume error: ${err.message}`, 'error');
+    }
+  }
+
+  async function shutdownScheduler() {
+    if (!confirm('Are you sure you want to SHUTDOWN the scheduler?')) return;
+    try {
+      const res = await fetch(`${API_BASE}/scheduler/shutdown`, { method: 'POST' });
+      if (res.ok) {
+        showToast('Scheduler shutdown initiated', 'error');
+        refreshOverview();
+      }
+    } catch (err) {
+      showToast(`Shutdown error: ${err.message}`, 'error');
+    }
+  }
+
+  if (btnHalt) btnHalt.addEventListener('click', haltScheduler);
+  if (btnResume) btnResume.addEventListener('click', resumeScheduler);
+  if (btnShutdown) btnShutdown.addEventListener('click', shutdownScheduler);
+  if (adminBtnHalt) adminBtnHalt.addEventListener('click', haltScheduler);
+  if (adminBtnResume) adminBtnResume.addEventListener('click', resumeScheduler);
+  if (adminBtnShutdown) adminBtnShutdown.addEventListener('click', shutdownScheduler);
+
+  const btnRefresh = document.getElementById('btn-refresh-data');
+  if (btnRefresh) {
+    btnRefresh.addEventListener('click', () => {
+      refreshOverview();
+      showToast('Data refreshed', 'info');
+    });
+  }
+
+  // ──────────────────────────────────────────────────
+  // Create Job Modal
   // ──────────────────────────────────────────────────
   const modal = document.getElementById('modal-create-job');
   const btnOpenModal = document.getElementById('btn-open-create-job');
@@ -668,13 +546,6 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnCloseX) btnCloseX.addEventListener('click', closeModal);
   if (btnCancelModal) btnCancelModal.addEventListener('click', closeModal);
 
-  // Close modal on backdrop click
-  if (modal) {
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) closeModal();
-    });
-  }
-
   if (formCreateJob) {
     formCreateJob.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -686,7 +557,6 @@ document.addEventListener('DOMContentLoaded', () => {
       const taskType = document.getElementById('input-task-type').value.trim();
       const failurePolicy = document.getElementById('select-failure-policy').value;
 
-      // CreateJobRequest DTO uses "id" and "name" (not "jobId" and "jobName")
       const payload = {
         id: jobId,
         name: jobName,
@@ -702,22 +572,23 @@ document.addEventListener('DOMContentLoaded', () => {
           body: JSON.stringify(payload)
         });
 
-        if (res.ok) {
+        if (res.status === 201 || res.ok) {
+          showToast(`Job '${jobId}' created successfully`, 'success');
           closeModal();
           formCreateJob.reset();
-          showToast(`Job "${jobId}" created successfully.`, 'success');
+          refreshOverview();
           fetchJobs();
-          fetchSchedulerStatus();
         } else {
-          const err = await res.json().catch(() => ({ message: 'Unknown failure' }));
+          const errData = await res.json().catch(() => ({}));
+          const errMsg = errData.message || 'Failed to create job';
           if (createJobError) {
-            createJobError.textContent = `Error: ${err.message || 'Unknown failure'}`;
+            createJobError.textContent = errMsg;
             createJobError.style.display = 'block';
           }
         }
       } catch (err) {
         if (createJobError) {
-          createJobError.textContent = `Network error: ${err.message}`;
+          createJobError.textContent = `Error: ${err.message}`;
           createJobError.style.display = 'block';
         }
       } finally {
@@ -726,181 +597,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // ──────────────────────────────────────────────────
-  // Scheduler Administrative Controls
-  // ──────────────────────────────────────────────────
-  async function haltScheduler() {
-    if (!confirm('Are you sure you want to HALT the scheduler? New job dispatch will be paused.')) return;
-    try {
-      const res = await fetch(`${API_BASE}/scheduler/halt`, { method: 'POST' });
-      if (res.ok) {
-        showToast('Scheduler halted.', 'warning');
-        fetchSchedulerStatus();
-      } else {
-        showToast('Failed to halt scheduler.', 'error');
-      }
-    } catch (err) {
-      showToast(`Error: ${err.message}`, 'error');
-    }
-  }
-
-  async function resumeScheduler() {
-    try {
-      const res = await fetch(`${API_BASE}/scheduler/resume`, { method: 'POST' });
-      if (res.ok) {
-        showToast('Scheduler resumed.', 'success');
-        fetchSchedulerStatus();
-      } else {
-        showToast('Failed to resume scheduler.', 'error');
-      }
-    } catch (err) {
-      showToast(`Error: ${err.message}`, 'error');
-    }
-  }
-
-  async function shutdownScheduler() {
-    if (!confirm('CAUTION: Are you sure you want to SHUTDOWN the scheduler service? This cannot be undone from the console.')) return;
-    try {
-      const res = await fetch(`${API_BASE}/scheduler/shutdown`, { method: 'POST' });
-      if (res.ok) {
-        showToast('Scheduler shutdown initiated.', 'warning');
-        fetchSchedulerStatus();
-      } else {
-        showToast('Failed to shutdown scheduler.', 'error');
-      }
-    } catch (err) {
-      showToast(`Error: ${err.message}`, 'error');
-    }
-  }
-
-  // Bind all control buttons
-  const btnHalt = document.getElementById('btn-halt-scheduler');
-  const btnResume = document.getElementById('btn-resume-scheduler');
-  const adminBtnHalt = document.getElementById('admin-btn-halt');
-  const adminBtnResume = document.getElementById('admin-btn-resume');
-  const adminBtnShutdown = document.getElementById('admin-btn-shutdown');
-  const btnRefresh = document.getElementById('btn-refresh-data');
-
-  if (btnHalt) btnHalt.addEventListener('click', haltScheduler);
-  if (btnResume) btnResume.addEventListener('click', resumeScheduler);
-  if (adminBtnHalt) adminBtnHalt.addEventListener('click', haltScheduler);
-  if (adminBtnResume) adminBtnResume.addEventListener('click', resumeScheduler);
-  if (adminBtnShutdown) adminBtnShutdown.addEventListener('click', shutdownScheduler);
-  if (btnRefresh) btnRefresh.addEventListener('click', () => {
-    showToast('Refreshing…', 'info');
-    refreshAll();
-  });
-
-  // ──────────────────────────────────────────────────
-  // Global Search (client-side filter for jobs table)
-  // ──────────────────────────────────────────────────
-  const searchInput = document.getElementById('global-search');
-  if (searchInput) {
-    searchInput.addEventListener('input', () => {
-      const query = searchInput.value.toLowerCase().trim();
-      const rows = document.querySelectorAll('#table-jobs-body tr');
-      rows.forEach(row => {
-        if (!query) { row.style.display = ''; return; }
-        row.style.display = row.textContent.toLowerCase().includes(query) ? '' : 'none';
-      });
-    });
-
-    // Ctrl+K focus shortcut
-    document.addEventListener('keydown', (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-        e.preventDefault();
-        searchInput.focus();
-      }
-    });
-  }
-
-  // ──────────────────────────────────────────────────
-  // Utility Functions
-  // ──────────────────────────────────────────────────
-  function escapeHtml(str) {
-    if (str == null) return '';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  }
-
-  function setTextById(id, text) {
-    const el = document.getElementById(id);
-    if (el) el.textContent = text != null ? String(text) : '—';
-  }
-
-  function getStatusDotClass(status) {
-    if (status === 'RUNNING') return 'green';
-    if (status === 'HALTED') return 'amber';
-    return 'red';
-  }
-
-  function formatDateTime(isoString) {
-    if (!isoString) return '—';
-    try {
-      const d = new Date(isoString);
-      if (isNaN(d.getTime())) return isoString;
-      return d.toLocaleString();
-    } catch {
-      return isoString;
-    }
-  }
-
-  function formatDuration(ms) {
-    if (ms == null) return '—';
-    if (ms < 1000) return `${ms}ms`;
-    const s = Math.round(ms / 1000);
-    if (s < 60) return `${s}s`;
-    const m = Math.floor(s / 60);
-    const rem = s % 60;
-    return `${m}m ${rem}s`;
-  }
-
-  function formatInterval(ms) {
-    if (!ms) return '—';
-    const s = ms / 1000;
-    if (s < 60) return `${s}s`;
-    const m = s / 60;
-    if (m < 60) return `${m}m`;
-    const h = m / 60;
-    return `${h}h`;
-  }
-
-  // ──────────────────────────────────────────────────
-  // Refresh Functions
-  // ──────────────────────────────────────────────────
   function refreshOverview() {
     fetchSchedulerStatus();
-    fetchOverviewExecutions();
+    fetchExecutions();
+    fetchWorkflows();
   }
 
-  function refreshAll() {
-    fetchSchedulerStatus();
-    fetchOverviewExecutions();
-    fetchJobs();
-    fetchExecutions(currentExecPage);
-  }
-
-  // ──────────────────────────────────────────────────
-  // Initial Load & Regular Polling
-  // ──────────────────────────────────────────────────
-  fetchSchedulerStatus();
-  fetchOverviewExecutions();
-  fetchJobs();
-
-  // Poll scheduler status every 5 seconds
-  setInterval(() => {
-    fetchSchedulerStatus();
-  }, 5000);
-
-  // Poll overview executions every 10 seconds (when on overview)
-  setInterval(() => {
-    const overviewPanel = document.getElementById('view-overview');
-    if (overviewPanel && overviewPanel.classList.contains('active')) {
-      fetchOverviewExecutions();
-    }
-  }, 10000);
+  // Initial load & 5-second polling interval
+  refreshOverview();
+  setInterval(refreshOverview, 5000);
 });

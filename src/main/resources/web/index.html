@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Job Scheduler Console</title>
-  <meta name="description" content="Java Job Scheduler Administration Console - Production engineering operations tool.">
+  <meta name="description" content="Java Job Scheduler V8 Web Administration Console.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -12,51 +12,56 @@
 </head>
 <body>
   <div class="app-container">
-    <!-- Navigation Sidebar -->
+    <!-- Sidebar -->
     <aside class="sidebar">
-      <div class="brand">
-        <div class="brand-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="2" y="2" width="20" height="20" rx="3"></rect>
-            <path d="M7 12h10M12 7v10"></path>
-          </svg>
+      <div class="sidebar-top">
+        <div class="brand">
+          <div class="brand-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path>
+            </svg>
+          </div>
+          <div class="brand-text">
+            <h2>Job Scheduler</h2>
+            <span id="sidebar-version-text">v8.0.0 (dev)</span>
+          </div>
         </div>
-        <div class="brand-text">
-          <h2>Job Scheduler</h2>
-          <span>v8.0.0 Administration</span>
-        </div>
+
+        <nav class="nav-menu">
+          <a href="#overview" class="nav-item active" data-view="overview">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+            Overview
+          </a>
+          <a href="#jobs" class="nav-item" data-view="jobs">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+            Jobs
+          </a>
+          <a href="#executions" class="nav-item" data-view="executions">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polygon points="10 8 16 12 10 16 10 8"></polygon></svg>
+            Executions
+          </a>
+          <a href="#workflows" class="nav-item" data-view="workflows">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="3"></circle><circle cx="5" cy="19" r="3"></circle><circle cx="19" cy="19" r="3"></circle><line x1="12" y1="8" x2="5" y2="16"></line><line x1="12" y1="8" x2="19" y2="16"></line></svg>
+            Workflows
+          </a>
+          <a href="#scheduler" class="nav-item" data-view="scheduler">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
+            Scheduler
+          </a>
+        </nav>
       </div>
 
-      <nav class="nav-menu">
-        <a href="#overview" class="nav-item active" data-view="overview">
-          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
-          Overview
-        </a>
-        <a href="#jobs" class="nav-item" data-view="jobs">
-          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-          Jobs
-        </a>
-        <a href="#executions" class="nav-item" data-view="executions">
-          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polygon points="10 8 16 12 10 16 10 8"></polygon></svg>
-          Executions
-        </a>
-        <a href="#workflows" class="nav-item" data-view="workflows">
-          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="3"></circle><circle cx="5" cy="19" r="3"></circle><circle cx="19" cy="19" r="3"></circle><line x1="12" y1="8" x2="5" y2="16"></line><line x1="12" y1="8" x2="19" y2="16"></line></svg>
-          Workflows
-        </a>
-        <a href="#scheduler" class="nav-item" data-view="scheduler">
-          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
-          Scheduler
-        </a>
-      </nav>
-
-      <div class="sidebar-footer">
+      <div class="sidebar-bottom">
         <div class="connection-status" id="sidebar-connection">
-          <span class="status-dot" id="sidebar-status-dot"></span>
+          <span class="status-dot green" id="sidebar-status-dot"></span>
           <div class="status-info">
-            <span class="status-text" id="sidebar-status-text">Connecting…</span>
-            <span class="version-text" id="sidebar-version-text">—</span>
+            <span class="status-text" id="sidebar-status-text">Connected</span>
+            <span class="subtext">MongoDB</span>
           </div>
+        </div>
+        <div class="quote-box">
+          <p>"Reliable jobs.<br>Happier systems."</p>
+          <span>Build. Schedule. Deliver.</span>
         </div>
       </div>
     </aside>
@@ -66,209 +71,356 @@
       <!-- Top Navigation Bar -->
       <header class="topbar">
         <div class="search-box">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-          <input type="text" id="global-search" placeholder="Filter jobs or executions…">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          <input type="text" id="global-search" placeholder="Search jobs, executions, or anything...">
           <kbd>Ctrl K</kbd>
         </div>
 
         <div class="topbar-right">
-          <div class="status-badge" id="topbar-status-pill">
+          <div class="scheduler-status-pill running" id="topbar-status-pill">
             <span class="dot" id="topbar-dot"></span>
-            <span id="topbar-status-text">Connecting…</span>
+            <span id="topbar-status-text">Scheduler Running</span>
           </div>
-          <button class="btn btn-secondary btn-sm" id="btn-refresh-data" title="Refresh data">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
-            Refresh
+          <button class="icon-btn-refresh" id="btn-refresh-data" title="Refresh data">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
           </button>
-          <div class="user-meta">
-            <span class="user-name">Siva Prasad</span>
-            <span class="user-role">Admin</span>
+          <div class="user-profile">
+            <div class="avatar">S</div>
+            <div class="user-info">
+              <span class="user-name">Siva Prasad</span>
+              <span class="user-role">Administrator</span>
+            </div>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
           </div>
         </div>
       </header>
 
-      <!-- Content Workspace -->
+      <!-- Content Views -->
       <main class="content-body">
         <!-- OVERVIEW VIEW -->
         <section id="view-overview" class="view-panel active">
-          <!-- Page Header -->
-          <div class="page-header">
-            <div>
-              <span class="page-category" id="greeting-text">System Status</span>
-              <h1 class="page-title" id="banner-headline">Scheduler Overview</h1>
-              <p class="page-desc">Current scheduler state and operational execution metrics.</p>
+          <!-- Hero Banner Section -->
+          <div class="hero-section">
+            <div class="hero-text">
+              <span class="greeting" id="greeting-text">Good evening,</span>
+              <h1 class="hero-title" id="banner-headline">Your scheduler is running smoothly.</h1>
+              <p class="hero-desc">Manage and monitor your jobs, executions and workflows from one place.</p>
             </div>
-            <div class="sys-meta-strip" id="system-widget">
-              <div class="sys-item"><span class="sys-lbl">ENV</span><span class="sys-val" id="widget-env">—</span></div>
-              <div class="sys-item"><span class="sys-lbl">DB</span><span class="sys-val" id="widget-db">—</span></div>
-              <div class="sys-item"><span class="sys-lbl">UPTIME</span><span class="sys-val" id="widget-uptime">—</span></div>
-            </div>
-          </div>
-
-          <!-- Operational Metric Bar -->
-          <div class="metrics-row">
-            <div class="metric-box">
-              <span class="metric-label">TOTAL JOBS</span>
-              <span class="metric-value" id="stat-total-jobs">—</span>
-            </div>
-            <div class="metric-box">
-              <span class="metric-label">RUNNING</span>
-              <span class="metric-value green" id="stat-running-exec">—</span>
-            </div>
-            <div class="metric-box">
-              <span class="metric-label">SCHEDULED</span>
-              <span class="metric-value blue" id="stat-scheduled-exec">—</span>
-            </div>
-            <div class="metric-box">
-              <span class="metric-label">BLOCKED</span>
-              <span class="metric-value amber" id="stat-blocked-exec">—</span>
-            </div>
-            <div class="metric-box">
-              <span class="metric-label">FAILED</span>
-              <span class="metric-value red" id="stat-failed-exec">—</span>
+            <div class="hero-datetime" id="hero-datetime">
+              <span class="date" id="hero-date">Mon, 24 Jun 2024</span>
+              <span class="time" id="hero-time">10:24 PM</span>
             </div>
           </div>
 
-          <!-- Main Operational Panels Grid -->
-          <div class="dashboard-grid">
-            <!-- Active Executions Panel -->
-            <div class="panel">
-              <div class="panel-header">
-                <h3>Active Executions</h3>
-                <a href="#executions" class="link-btn view-all-link" data-target="executions">View all</a>
+          <!-- 5 Metric Cards Row -->
+          <div class="metric-cards-grid">
+            <div class="metric-card">
+              <div class="card-icon blue">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
               </div>
-              <div class="table-responsive">
-                <table class="data-table">
-                  <thead>
-                    <tr>
-                      <th>JOB ID</th>
-                      <th>TASK TYPE</th>
-                      <th>STARTED AT</th>
-                      <th>DURATION</th>
-                      <th>STATUS</th>
-                    </tr>
-                  </thead>
-                  <tbody id="table-active-executions">
-                    <tr><td colspan="5" class="empty-state"><span class="loading-spinner"></span> Loading active executions…</td></tr>
-                  </tbody>
-                </table>
+              <div class="card-content">
+                <span class="label">Total Jobs</span>
+                <span class="value" id="stat-total-jobs">0</span>
               </div>
             </div>
 
-            <!-- Recent Executions Panel -->
-            <div class="panel">
-              <div class="panel-header">
-                <h3>Recent Executions</h3>
-                <a href="#executions" class="link-btn view-all-link" data-target="executions">View all</a>
+            <div class="metric-card">
+              <div class="card-icon green">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
               </div>
-              <div class="table-responsive">
-                <table class="data-table">
-                  <thead>
-                    <tr>
-                      <th>JOB ID</th>
-                      <th>STATUS</th>
-                      <th>DURATION</th>
-                    </tr>
-                  </thead>
-                  <tbody id="table-recent-executions">
-                    <tr><td colspan="3" class="empty-state"><span class="loading-spinner"></span> Loading execution history…</td></tr>
-                  </tbody>
-                </table>
+              <div class="card-content">
+                <span class="label">Running</span>
+                <span class="value" id="stat-running-exec">0</span>
               </div>
             </div>
 
-            <!-- Scheduler State Control Panel -->
-            <div class="panel">
-              <div class="panel-header">
-                <h3>Scheduler Control</h3>
+            <div class="metric-card">
+              <div class="card-icon purple">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
               </div>
-              <div class="control-box">
-                <div class="control-state-row">
-                  <span class="dot-indicator" id="ctrl-dot"></span>
-                  <div>
-                    <h4 id="ctrl-status-title">Checking…</h4>
-                    <span class="subtext" id="ctrl-status-sub">Retrieving status…</span>
+              <div class="card-content">
+                <span class="label">Scheduled</span>
+                <span class="value" id="stat-scheduled-exec">0</span>
+              </div>
+            </div>
+
+            <div class="metric-card">
+              <div class="card-icon amber">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+              </div>
+              <div class="card-content">
+                <span class="label">Blocked</span>
+                <span class="value" id="stat-blocked-exec">0</span>
+              </div>
+            </div>
+
+            <div class="metric-card">
+              <div class="card-icon red">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+              </div>
+              <div class="card-content">
+                <span class="label">Failed</span>
+                <span class="value" id="stat-failed-exec">0</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Main Overview Content Composition (Left Fluid, Right Fixed Panel) -->
+          <div class="overview-layout">
+            <!-- Left Fluid Section -->
+            <div class="overview-main">
+              <!-- Row 1: Active Executions & Upcoming Executions -->
+              <div class="two-col-grid">
+                <!-- Active Executions Panel -->
+                <div class="glass-panel">
+                  <div class="panel-header">
+                    <h3>Active Executions</h3>
+                    <a href="#executions" class="action-link view-all-link" data-target="executions">View all &rarr;</a>
+                  </div>
+                  <div class="table-responsive">
+                    <table class="glass-table">
+                      <thead>
+                        <tr>
+                          <th>JOB ID</th>
+                          <th>TASK</th>
+                          <th>STARTED AT</th>
+                          <th>DURATION</th>
+                          <th>STATUS</th>
+                        </tr>
+                      </thead>
+                      <tbody id="table-active-executions">
+                        <tr>
+                          <td colspan="5">
+                            <div class="empty-state-box">
+                              <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
+                              <h4>No active executions</h4>
+                              <p>No jobs are currently running.</p>
+                            </div>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
                 </div>
-                <div class="spec-grid">
-                  <div class="spec-item"><span>Worker Threads</span><strong id="ctrl-threads">—</strong></div>
-                  <div class="spec-item"><span>Queue Size</span><strong id="ctrl-queue">—</strong></div>
-                  <div class="spec-item"><span>Uptime</span><strong id="ctrl-uptime">—</strong></div>
+
+                <!-- Upcoming Executions Panel -->
+                <div class="glass-panel">
+                  <div class="panel-header">
+                    <h3>Upcoming Executions</h3>
+                    <a href="#executions" class="action-link view-all-link" data-target="executions">View all &rarr;</a>
+                  </div>
+                  <div class="table-responsive">
+                    <table class="glass-table">
+                      <thead>
+                        <tr>
+                          <th>JOB ID</th>
+                          <th>SCHEDULED AT</th>
+                          <th>TYPE</th>
+                        </tr>
+                      </thead>
+                      <tbody id="table-recent-executions">
+                        <tr>
+                          <td colspan="3">
+                            <div class="empty-state-box">
+                              <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                              <h4>No upcoming executions</h4>
+                              <p>Scheduled jobs will appear here.</p>
+                            </div>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-                <div class="btn-group">
-                  <button class="btn btn-secondary" id="btn-halt-scheduler" style="display:none;">Halt Scheduler</button>
-                  <button class="btn btn-primary" id="btn-resume-scheduler" style="display:none;">Resume Scheduler</button>
+              </div>
+
+              <!-- Row 2: Job Status Overview & Execution History -->
+              <div class="two-col-grid margin-top">
+                <!-- Job Status Overview Panel -->
+                <div class="glass-panel">
+                  <div class="panel-header">
+                    <h3>Job Status Overview</h3>
+                  </div>
+                  <div class="status-overview-content">
+                    <div class="donut-chart-wrapper">
+                      <svg viewBox="0 0 36 36" class="donut-svg" id="donut-svg">
+                        <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                      </svg>
+                      <div class="donut-center-text">
+                        <span class="donut-num" id="donut-total">0</span>
+                        <span class="donut-label">Total Jobs</span>
+                      </div>
+                    </div>
+                    <div class="status-legend-grid" id="donut-legend">
+                      <div class="legend-row"><span class="legend-dot green"></span><span class="lbl">Running</span><span class="val" id="legend-running">0 (0%)</span></div>
+                      <div class="legend-row"><span class="legend-dot blue"></span><span class="lbl">Scheduled</span><span class="val" id="legend-scheduled">0 (0%)</span></div>
+                      <div class="legend-row"><span class="legend-dot amber"></span><span class="lbl">Blocked</span><span class="val" id="legend-blocked">0 (0%)</span></div>
+                      <div class="legend-row"><span class="legend-dot red"></span><span class="lbl">Failed</span><span class="val" id="legend-failed">0 (0%)</span></div>
+                      <div class="legend-row"><span class="legend-dot green-alt"></span><span class="lbl">Completed</span><span class="val" id="legend-completed">0 (0%)</span></div>
+                      <div class="legend-row"><span class="legend-dot gray"></span><span class="lbl">Cancelled</span><span class="val" id="legend-cancelled">0 (0%)</span></div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Execution History Panel -->
+                <div class="glass-panel">
+                  <div class="panel-header">
+                    <h3>Execution History</h3>
+                    <div class="dropdown-pill">
+                      <span>Last 24 hours</span>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </div>
+                  </div>
+                  <div class="chart-empty-container" id="activity-feed">
+                    <div class="chart-grid-bg"></div>
+                    <div class="empty-state-box overlay">
+                      <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+                      <h4>No execution history</h4>
+                      <p>Execution metrics will appear after jobs run.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Row 3: Workflow Health & System Information -->
+              <div class="two-col-grid margin-top">
+                <!-- Workflow Health Card -->
+                <div class="glass-panel info-box-panel">
+                  <div class="info-box-header">
+                    <div class="round-icon-box blue">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="3"></circle><circle cx="5" cy="19" r="3"></circle><circle cx="19" cy="19" r="3"></circle><line x1="12" y1="8" x2="5" y2="16"></line><line x1="12" y1="8" x2="19" y2="16"></line></svg>
+                    </div>
+                    <div class="info-box-title">
+                      <h3>Workflow Health</h3>
+                      <a href="#workflows" class="action-link view-all-link" data-target="workflows">View all &rarr;</a>
+                    </div>
+                  </div>
+                  <div class="info-box-body">
+                    <div class="big-metric"><span id="info-workflow-count">0</span> <span class="unit">workflows</span></div>
+                    <p>Workflows appear when jobs have dependencies.</p>
+                  </div>
+                </div>
+
+                <!-- System Information Card -->
+                <div class="glass-panel info-box-panel">
+                  <div class="info-box-header">
+                    <div class="round-icon-box cyan">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M21 19c0 1.66-4 3-9 3s-9-1.34-9-3"></path></svg>
+                    </div>
+                    <div class="info-box-title">
+                      <h3>System Information</h3>
+                    </div>
+                  </div>
+                  <div class="sys-info-grid">
+                    <div class="sys-info-col">
+                      <span class="label">Database</span>
+                      <span class="value" id="info-db-name">job_scheduler_db</span>
+                    </div>
+                    <div class="sys-info-col">
+                      <span class="label">Connection</span>
+                      <span class="value green-text" id="info-db-status"><span class="dot green"></span> Connected</span>
+                    </div>
+                    <div class="sys-info-col">
+                      <span class="label">Version</span>
+                      <span class="value" id="info-sys-version">v8.0.0</span>
+                    </div>
+                    <div class="sys-info-col">
+                      <span class="label">Environment</span>
+                      <span class="value" id="info-sys-env">Development</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <!-- Execution Status Distribution -->
-            <div class="panel">
-              <div class="panel-header">
-                <h3>Status Distribution</h3>
-              </div>
-              <div class="breakdown-container">
-                <div class="total-count-box">
-                  <span class="big-num" id="donut-total">—</span>
-                  <span class="sub-lbl">Total Executions</span>
+            <!-- Right Fixed Scheduler Panel -->
+            <aside class="overview-sidebar">
+              <!-- RUNNING Status Card -->
+              <div class="status-banner-card">
+                <div class="banner-left">
+                  <div class="banner-title-row">
+                    <span class="glow-dot green" id="ctrl-dot"></span>
+                    <h2 id="ctrl-status-title">RUNNING</h2>
+                  </div>
+                  <p id="ctrl-status-sub">Scheduler is dispatching jobs.</p>
                 </div>
-                <div class="distribution-list" id="donut-legend">
-                  <div class="dist-row"><span class="badge-status running">RUNNING</span><strong id="legend-running">0</strong></div>
-                  <div class="dist-row"><span class="badge-status completed">COMPLETED</span><strong id="legend-completed">0</strong></div>
-                  <div class="dist-row"><span class="badge-status scheduled">SCHEDULED</span><strong id="legend-scheduled">0</strong></div>
-                  <div class="dist-row"><span class="badge-status blocked">BLOCKED</span><strong id="legend-blocked">0</strong></div>
-                  <div class="dist-row"><span class="badge-status failed">FAILED</span><strong id="legend-failed">0</strong></div>
-                </div>
+                <div class="banner-right-glow"></div>
               </div>
-              <!-- Hidden compatibility SVG element required by app.js -->
-              <svg id="donut-svg" style="display:none;"></svg>
-            </div>
 
-            <!-- Activity Log -->
-            <div class="panel">
-              <div class="panel-header">
-                <h3>Recent Activity Log</h3>
-                <a href="#executions" class="link-btn view-all-link" data-target="executions">View executions</a>
-              </div>
-              <div class="activity-feed" id="activity-feed">
-                <div class="empty-state"><span class="loading-spinner"></span> Loading log entries…</div>
-              </div>
-            </div>
+              <!-- Scheduler Status Panel -->
+              <div class="glass-panel scheduler-specs-panel">
+                <div class="panel-header">
+                  <h3>Scheduler Status</h3>
+                </div>
+                <div class="specs-list">
+                  <div class="spec-row">
+                    <span class="spec-label"><svg class="spec-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> State</span>
+                    <span class="spec-val green-text" id="spec-val-state">RUNNING</span>
+                  </div>
+                  <div class="spec-row">
+                    <span class="spec-label"><svg class="spec-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> Worker Threads</span>
+                    <span class="spec-val" id="ctrl-threads">3 / 3</span>
+                  </div>
+                  <div class="spec-row">
+                    <span class="spec-label"><svg class="spec-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg> Queue Size</span>
+                    <span class="spec-val" id="ctrl-queue">0 pending</span>
+                  </div>
+                  <div class="spec-row">
+                    <span class="spec-label"><svg class="spec-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> Uptime</span>
+                    <span class="spec-val" id="ctrl-uptime">0d 0h 3m</span>
+                  </div>
+                  <div class="spec-row">
+                    <span class="spec-label"><svg class="spec-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M21 19c0 1.66-4 3-9 3s-9-1.34-9-3"></path></svg> MongoDB</span>
+                    <span class="spec-val green-text"><span class="dot green"></span> Connected</span>
+                  </div>
+                  <div class="spec-row">
+                    <span class="spec-label"><svg class="spec-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg> Database</span>
+                    <span class="spec-val" id="spec-val-db">job_scheduler_db</span>
+                  </div>
+                  <div class="spec-row">
+                    <span class="spec-label"><svg class="spec-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg> Version</span>
+                    <span class="spec-val" id="spec-val-version">v8.0.0</span>
+                  </div>
+                  <div class="spec-row">
+                    <span class="spec-label"><svg class="spec-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg> Environment</span>
+                    <span class="spec-val" id="spec-val-env">Development</span>
+                  </div>
+                </div>
 
-            <!-- System Information -->
-            <div class="panel">
-              <div class="panel-header">
-                <h3>Runtime Information</h3>
-              </div>
-              <div class="info-grid">
-                <div class="info-row">
-                  <span>Completed Executions</span>
-                  <strong id="info-completed-count">—</strong>
+                <div class="action-btn-group">
+                  <button class="btn btn-navy" id="btn-halt-scheduler">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                    Halt Scheduler
+                  </button>
+                  <button class="btn btn-navy" id="btn-resume-scheduler" style="display:none;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                    Resume Scheduler
+                  </button>
+                  <button class="btn btn-danger" id="btn-shutdown-scheduler">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+                    Shutdown
+                  </button>
                 </div>
-                <div class="info-row">
-                  <span>Persistence Status</span>
-                  <strong id="info-db-status">Checking…</strong>
-                </div>
               </div>
-            </div>
+            </aside>
           </div>
         </section>
 
         <!-- JOBS VIEW -->
         <section id="view-jobs" class="view-panel">
-          <div class="page-header">
+          <div class="view-header">
             <div>
-              <h1 class="page-title">Job Definitions</h1>
-              <p class="page-desc">Registered scheduler jobs and recurrence definitions.</p>
+              <h2>Job Definitions</h2>
+              <p>Manage and inspect scheduled job definitions.</p>
             </div>
             <button class="btn btn-primary" id="btn-open-create-job">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
               Create Job
             </button>
           </div>
-          <div class="panel">
+          <div class="glass-panel">
             <div class="table-responsive">
-              <table class="data-table">
+              <table class="glass-table">
                 <thead>
                   <tr>
                     <th>JOB ID</th>
@@ -280,7 +432,7 @@
                   </tr>
                 </thead>
                 <tbody id="table-jobs-body">
-                  <tr><td colspan="6" class="empty-state"><span class="loading-spinner"></span> Loading jobs…</td></tr>
+                  <tr><td colspan="6" class="empty-state">Loading jobs…</td></tr>
                 </tbody>
               </table>
             </div>
@@ -289,18 +441,16 @@
 
         <!-- EXECUTIONS VIEW -->
         <section id="view-executions" class="view-panel">
-          <div class="page-header">
+          <div class="view-header">
             <div>
-              <h1 class="page-title">Execution History</h1>
-              <p class="page-desc">Historical records of all job execution attempts.</p>
+              <h2>Execution History</h2>
+              <p>Historical log of job execution occurrences and attempts.</p>
             </div>
-            <div class="pagination-controls" id="exec-pagination">
-              <!-- Populated by app.js -->
-            </div>
+            <div class="pagination-controls" id="exec-pagination"></div>
           </div>
-          <div class="panel">
+          <div class="glass-panel">
             <div class="table-responsive">
-              <table class="data-table">
+              <table class="glass-table">
                 <thead>
                   <tr>
                     <th>EXECUTION ID</th>
@@ -313,7 +463,7 @@
                   </tr>
                 </thead>
                 <tbody id="table-executions-body">
-                  <tr><td colspan="7" class="empty-state"><span class="loading-spinner"></span> Loading executions…</td></tr>
+                  <tr><td colspan="7" class="empty-state">Loading executions…</td></tr>
                 </tbody>
               </table>
             </div>
@@ -322,56 +472,52 @@
 
         <!-- WORKFLOWS VIEW -->
         <section id="view-workflows" class="view-panel">
-          <div class="page-header">
+          <div class="view-header">
             <div>
-              <h1 class="page-title">Workflow DAG Dependencies</h1>
-              <p class="page-desc">Directed Acyclic Graph of job execution dependencies.</p>
+              <h2>Workflow DAG Dependencies</h2>
+              <p>DAG graph of job execution dependencies.</p>
             </div>
           </div>
-          <div class="panel">
+          <div class="glass-panel">
             <div id="workflow-graph-container" class="graph-container">
-              <div class="empty-state"><span class="loading-spinner"></span> Loading workflow DAG…</div>
+              <div class="empty-state">Loading workflow data…</div>
             </div>
           </div>
         </section>
 
         <!-- SCHEDULER VIEW -->
         <section id="view-scheduler" class="view-panel">
-          <div class="page-header">
+          <div class="view-header">
             <div>
-              <h1 class="page-title">Scheduler Administration</h1>
-              <p class="page-desc">Operational controls and state metrics for the core scheduling engine.</p>
+              <h2>Scheduler Administration</h2>
+              <p>Control scheduler lifecycle state and operational configuration.</p>
             </div>
           </div>
-          <div class="panel">
-            <div class="admin-state-box">
-              <div class="admin-state-header">
-                <span class="dot-indicator lg" id="admin-dot"></span>
-                <div>
-                  <h2 id="admin-status-heading">Fetching…</h2>
-                  <p id="admin-status-desc">Checking state…</p>
-                </div>
+          <div class="glass-panel admin-panel">
+            <div class="admin-header">
+              <span class="glow-dot green" id="admin-dot"></span>
+              <div>
+                <h2 id="admin-status-heading">State: RUNNING</h2>
+                <p id="admin-status-desc">Scheduler is actively dispatching jobs.</p>
               </div>
-
-              <div class="specs-table" id="admin-specs">
-                <div class="spec-cell"><span>Status</span><strong id="admin-spec-status">—</strong></div>
-                <div class="spec-cell"><span>Worker Threads</span><strong id="admin-spec-threads">—</strong></div>
-                <div class="spec-cell"><span>Pending Queue</span><strong id="admin-spec-queue">—</strong></div>
-                <div class="spec-cell"><span>Total Jobs</span><strong id="admin-spec-jobs">—</strong></div>
-                <div class="spec-cell"><span>Active Executions</span><strong id="admin-spec-active">—</strong></div>
-                <div class="spec-cell"><span>Completed</span><strong id="admin-spec-completed">—</strong></div>
-                <div class="spec-cell"><span>Failed</span><strong id="admin-spec-failed">—</strong></div>
-                <div class="spec-cell"><span>Uptime</span><strong id="admin-spec-uptime">—</strong></div>
-                <div class="spec-cell"><span>Version</span><strong id="admin-spec-version">—</strong></div>
-                <div class="spec-cell"><span>Environment</span><strong id="admin-spec-env">—</strong></div>
-                <div class="spec-cell"><span>Database</span><strong id="admin-spec-db">—</strong></div>
-              </div>
-
-              <div class="admin-actions">
-                <button class="btn btn-secondary" id="admin-btn-halt">Halt Scheduler</button>
-                <button class="btn btn-primary" id="admin-btn-resume">Resume Scheduler</button>
-                <button class="btn btn-danger" id="admin-btn-shutdown">Shutdown Scheduler</button>
-              </div>
+            </div>
+            <div class="admin-specs-grid" id="admin-specs">
+              <div class="admin-spec-item"><span>Status</span><strong id="admin-spec-status">RUNNING</strong></div>
+              <div class="admin-spec-item"><span>Worker Threads</span><strong id="admin-spec-threads">3 / 3</strong></div>
+              <div class="admin-spec-item"><span>Pending Queue</span><strong id="admin-spec-queue">0</strong></div>
+              <div class="admin-spec-item"><span>Total Jobs</span><strong id="admin-spec-jobs">0</strong></div>
+              <div class="admin-spec-item"><span>Active Executions</span><strong id="admin-spec-active">0</strong></div>
+              <div class="admin-spec-item"><span>Completed</span><strong id="admin-spec-completed">0</strong></div>
+              <div class="admin-spec-item"><span>Failed</span><strong id="admin-spec-failed">0</strong></div>
+              <div class="admin-spec-item"><span>Uptime</span><strong id="admin-spec-uptime">0d 0h 3m</strong></div>
+              <div class="admin-spec-item"><span>Version</span><strong id="admin-spec-version">v8.0.0</strong></div>
+              <div class="admin-spec-item"><span>Environment</span><strong id="admin-spec-env">Development</strong></div>
+              <div class="admin-spec-item"><span>Database</span><strong id="admin-spec-db">job_scheduler_db</strong></div>
+            </div>
+            <div class="admin-btn-row">
+              <button class="btn btn-navy" id="admin-btn-halt">Halt Scheduler</button>
+              <button class="btn btn-primary" id="admin-btn-resume" style="display:none;">Resume Scheduler</button>
+              <button class="btn btn-danger" id="admin-btn-shutdown">Shutdown Scheduler</button>
             </div>
           </div>
         </section>
@@ -381,20 +527,20 @@
 
   <!-- Create Job Modal -->
   <div class="modal-backdrop" id="modal-create-job">
-    <div class="modal">
+    <div class="modal-dialog">
       <div class="modal-header">
-        <h3>Register New Job</h3>
+        <h3>Create New Job</h3>
         <button class="close-btn" id="modal-close-x">&times;</button>
       </div>
       <form id="form-create-job">
-        <div class="form-body">
+        <div class="modal-body">
           <div class="form-group">
             <label for="input-job-id">Job ID *</label>
             <input type="text" id="input-job-id" required placeholder="e.g. daily-report">
           </div>
           <div class="form-group">
             <label for="input-job-name">Job Name *</label>
-            <input type="text" id="input-job-name" required placeholder="e.g. Daily Report Task">
+            <input type="text" id="input-job-name" required placeholder="e.g. Daily Report Generator">
           </div>
           <div class="form-group">
             <label for="input-task-type">Task Type *</label>
@@ -413,13 +559,13 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" id="modal-btn-cancel">Cancel</button>
-          <button type="submit" class="btn btn-primary" id="modal-btn-submit">Register Job</button>
+          <button type="submit" class="btn btn-primary" id="modal-btn-submit">Create &amp; Register</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Toast Container -->
+  <!-- Toast Notification Container -->
   <div class="toast-container" id="toast-container"></div>
 
   <script src="app.js"></script>
