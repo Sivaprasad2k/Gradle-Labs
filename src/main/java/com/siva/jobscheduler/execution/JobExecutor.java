@@ -18,6 +18,7 @@ import java.util.function.Consumer;
 public class JobExecutor {
     private final ExecutorService executorService;
     private final Clock clock;
+    private final int workerCount;
     private volatile Consumer<JobExecution> onExecutionFinished;
 
     public JobExecutor(int workerCount) {
@@ -32,9 +33,14 @@ public class JobExecutor {
         if (workerCount <= 0) {
             throw new IllegalArgumentException("Worker count must be greater than zero");
         }
+        this.workerCount = workerCount;
         this.executorService = Executors.newFixedThreadPool(workerCount);
         this.clock = clock != null ? clock : Clock.systemUTC();
         this.onExecutionFinished = onExecutionFinished;
+    }
+
+    public int getWorkerCount() {
+        return workerCount;
     }
 
     public void setOnExecutionFinished(Consumer<JobExecution> onExecutionFinished) {

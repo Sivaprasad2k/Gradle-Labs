@@ -194,6 +194,27 @@ public class JobScheduler {
         return true;
     }
 
+    public boolean halt() {
+        if (schedulerState != SchedulerState.RUNNING) {
+            return false;
+        }
+        schedulerState = SchedulerState.HALTED;
+        persistSchedulerState(schedulerState);
+        System.out.printf("[%s] Scheduler halted. Scheduler state -> HALTED%n", clock.instant());
+        return true;
+    }
+
+    public boolean shutdown() {
+        if (schedulerState == SchedulerState.STOPPED) {
+            return false;
+        }
+        schedulerState = SchedulerState.STOPPED;
+        persistSchedulerState(schedulerState);
+        jobExecutor.shutdown();
+        System.out.printf("[%s] Scheduler shutdown. Scheduler state -> STOPPED%n", clock.instant());
+        return true;
+    }
+
     public SchedulerState getSchedulerState() {
         return schedulerState;
     }

@@ -1,60 +1,52 @@
-# Java Job Scheduler (V7)
+# Java Job Scheduler (V8)
 
 ## Project Overview
-A lightweight, durable Java 17 job scheduler designed to demonstrate core engineering concepts including clean architecture, bounded concurrent execution using `ExecutorService`, explicit thread-safe job lifecycle management, controlled failure recovery with exponential backoff retries, job dependency DAG workflow control, recurring fixed-rate scheduling with coalescing, durable MongoDB persistence, restart recovery, time-dependent unit testing, and fundamental scheduling algorithms without relying on heavy enterprise frameworks.
+A lightweight, durable Java 17 job scheduler designed to demonstrate core engineering concepts including clean architecture, bounded concurrent execution using `ExecutorService`, explicit thread-safe job lifecycle management, controlled failure recovery with exponential backoff retries, job dependency DAG workflow control, recurring fixed-rate scheduling with coalescing, durable MongoDB persistence, restart recovery, REST API, CLI administration tool, Web Administration Console, time-dependent unit testing, and fundamental scheduling algorithms without relying on heavy enterprise frameworks.
 
-## V7 Scope & Architectural Evolution
-Version 7 (V7) introduces **durable MongoDB persistence, execution history tracking, and restart recovery**. Building upon V6's recurrence engine, V7 shifts the runtime source of truth to MongoDB while preserving in-memory projections (`PriorityQueue`, `DependencyGraph`) for dispatching. V7 introduces `TaskType` / `TaskRegistry` abstractions, BSON document mappers, decoupled repository interfaces, and crash recovery for interrupted executions.
+## V8 Scope & Architectural Evolution
+Version 8 (V8) introduces the **External Administration Layer**:
+1. **Application Service Layer** (`com.siva.jobscheduler.application`): Clean service boundary separating domain logic from external interfaces.
+2. **REST API** (`com.siva.jobscheduler.api`): Hosted on JDK `HttpServer` under `/api/v1/...`.
+3. **CLI Administration Tool** (`com.siva.jobscheduler.cli.JobSchedulerCli`): Terminal interface operating over HTTP REST endpoints.
+4. **Web Administration Console** (`src/main/resources/web`): Modern dark navy/charcoal operator console served directly at `http://localhost:8080/`.
 
 ## Architecture & Core Components
 ```text
 com.siva.jobscheduler
+├── application
+│   ├── JobApplicationService.java
+│   ├── ExecutionApplicationService.java
+│   ├── WorkflowApplicationService.java
+│   └── SchedulerApplicationService.java
+├── dto
+│   ├── CreateJobRequest.java
+│   ├── JobResponse.java
+│   ├── ExecutionResponse.java
+│   ├── AttemptResponse.java
+│   ├── WorkflowResponse.java
+│   ├── SchedulerStatusResponse.java
+│   ├── PageResponse.java
+│   └── ErrorResponse.java
+├── api
+│   ├── json
+│   │   └── JsonUtils.java
+│   └── RestApiServer.java
+├── cli
+│   └── JobSchedulerCli.java
 ├── domain
-│   ├── Job.java
-│   ├── JobTask.java
-│   ├── JobStatus.java
-│   ├── JobExecution.java
-│   ├── ExecutionAttempt.java
-│   ├── RetryPolicy.java
-│   ├── FailurePolicy.java
-│   └── SchedulerState.java
 ├── task
-│   ├── TaskHandler.java
-│   └── TaskRegistry.java
 ├── persistence
-│   ├── JobRepository.java
-│   ├── ExecutionRepository.java
-│   ├── RecurrenceRepository.java
-│   ├── SchedulerStateRepository.java
-│   ├── MongoConnectionManager.java
-│   ├── mapper
-│   │   └── DocumentMapper.java
-│   └── mongo
-│       ├── MongoJobRepository.java
-│       ├── MongoExecutionRepository.java
-│       ├── MongoRecurrenceRepository.java
-│       └── MongoSchedulerStateRepository.java
 ├── recurrence
-│   ├── RecurrencePolicy.java
-│   ├── FixedRateRecurrence.java
-│   └── RecurrenceState.java
 ├── dependency
-│   └── DependencyGraph.java
 ├── scheduler
-│   └── JobScheduler.java
 ├── execution
-│   └── JobExecutor.java
 └── JobSchedulerApplication.java
 ```
-
-- **`domain.Job`**: Immutable record with persistent `taskType` / `taskPayload`, `RecurrencePolicy`, `dependencyIds`, and `FailurePolicy`.
-- **`task.TaskRegistry`**: Resolves persistent `taskType` to executable `TaskHandler` upon JVM restart.
-- **`persistence.mongo`**: Implements durable persistence using official MongoDB Java Driver (`org.mongodb:mongodb-driver-sync`).
-- **`scheduler.JobScheduler`**: Recovers state, jobs, recurrence states, and interrupted executions from MongoDB upon startup.
 
 ## Technology Stack
 - **Language**: Java 17
 - **Build Tool**: Gradle 9.7.1
+- **HTTP Server**: JDK `com.sun.net.httpserver.HttpServer`
 - **Database**: MongoDB Sync Driver 5.1.0
 - **Testing**: JUnit 5 (Jupiter)
 
@@ -70,18 +62,24 @@ com.siva.jobscheduler
 ./gradlew build
 ```
 
-**To execute the demonstration application:**
+**To execute the demonstration application (starts Web Console on http://localhost:8080):**
 ```bash
 ./gradlew run --console=plain
+```
+
+**To run CLI commands against a running scheduler:**
+```bash
+java -cp build/classes/java/main com.siva.jobscheduler.cli.JobSchedulerCli scheduler status
+java -cp build/classes/java/main com.siva.jobscheduler.cli.JobSchedulerCli job list
 ```
 
 ## Architecture Documentation
 Detailed decision records and version documentation are located in `/docs`:
 - `docs/architecture/architecture.md`
-- `docs/versions/v1.md` ... `docs/versions/v7.md`
-- `docs/decisions/ADR-001-priority-queue.md` ... `docs/decisions/ADR-007-mongodb-persistence-and-restart-recovery.md`
+- `docs/versions/v1.md` ... `docs/versions/v8.md`
+- `docs/decisions/ADR-001-priority-queue.md` ... `docs/decisions/ADR-008-rest-api-cli-web-console.md`
 
 ## Version Roadmap
-- **V1–V6**: Sequential queue, concurrency, lifecycle state machine, retries, DAG workflow control, fixed-rate recurrence.
-- **V7 (Current)**: Persistent jobs, execution history, MongoDB driver, and restart recovery.
-- **Future Versions**: May explore REST/CLI & Web Console (V8), and observability (V9).
+- **V1–V7**: Sequential queue, concurrency, lifecycle state machine, retries, DAG workflow control, fixed-rate recurrence, durable persistence, restart recovery.
+- **V8 (Current)**: REST API, CLI administration tool, and Web Administration Console.
+- **Future Versions**: May explore observability and metrics (V9).

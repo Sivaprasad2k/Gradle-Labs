@@ -25,8 +25,8 @@ public class JobSchedulerApplication {
 
     public static void main(String[] args) {
         System.out.println("==================================================");
-        System.out.println(" Java Job Scheduler - Version 7");
-        System.out.println(" Persistence, Execution History & Restart Recovery");
+        System.out.println(" Java Job Scheduler - Version 8");
+        System.out.println(" Administration Layer: REST API, CLI & Web Console");
         System.out.println("==================================================\n");
 
         // Register Task Types in TaskRegistry for Task Persistence
@@ -39,6 +39,22 @@ public class JobSchedulerApplication {
         JobExecutor executor = new JobExecutor(3, clock);
         JobScheduler scheduler = new JobScheduler(clock, executor);
         Instant now = clock.instant();
+
+        // Application Services & V8 REST API Server
+        com.siva.jobscheduler.application.JobApplicationService jobAppService = new com.siva.jobscheduler.application.JobApplicationService(scheduler, null, null);
+        com.siva.jobscheduler.application.ExecutionApplicationService execAppService = new com.siva.jobscheduler.application.ExecutionApplicationService(scheduler, null);
+        com.siva.jobscheduler.application.WorkflowApplicationService wfAppService = new com.siva.jobscheduler.application.WorkflowApplicationService(scheduler, null, null);
+        com.siva.jobscheduler.application.SchedulerApplicationService schedAppService = new com.siva.jobscheduler.application.SchedulerApplicationService(scheduler, executor, null, null);
+
+        int serverPort = 8080;
+        try {
+            com.siva.jobscheduler.api.RestApiServer apiServer = new com.siva.jobscheduler.api.RestApiServer(serverPort, jobAppService, execAppService, wfAppService, schedAppService);
+            apiServer.start();
+            System.out.printf("Web Console available at: http://localhost:%d/%n", serverPort);
+            System.out.printf("REST API base path:       http://localhost:%d/api/v1/%n%n", serverPort);
+        } catch (Exception e) {
+            System.err.println("Failed to start REST API Server: " + e.getMessage());
+        }
 
         // 1. Persistent Recurring Job R1
         AtomicInteger recurringCount = new AtomicInteger(0);
