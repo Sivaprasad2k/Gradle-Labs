@@ -26,6 +26,15 @@ public class WorkflowApplicationService {
         if (jobId == null) return Optional.empty();
 
         List<Job> allJobs = jobRepository != null ? jobRepository.findAll() : Collections.emptyList();
+        if (allJobs.isEmpty()) {
+            Map<String, Job> jobsMap = new LinkedHashMap<>();
+            for (JobExecution exec : scheduler.getAllExecutions()) {
+                if (exec != null && exec.getJob() != null) {
+                    jobsMap.putIfAbsent(exec.getJob().id(), exec.getJob());
+                }
+            }
+            allJobs = new ArrayList<>(jobsMap.values());
+        }
         Optional<Job> rootOpt = allJobs.stream().filter(j -> j.id().equals(jobId)).findFirst();
         if (rootOpt.isEmpty()) {
             JobExecution exec = scheduler.getExecution(jobId);

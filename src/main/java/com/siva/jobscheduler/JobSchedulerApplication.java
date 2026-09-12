@@ -6,6 +6,10 @@ import com.siva.jobscheduler.recurrence.FixedRateRecurrence;
 import com.siva.jobscheduler.scheduler.JobScheduler;
 import com.siva.jobscheduler.task.TaskRegistry;
 
+import com.siva.jobscheduler.persistence.*;
+import com.siva.jobscheduler.persistence.mongo.*;
+import com.mongodb.client.MongoDatabase;
+
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -35,16 +39,51 @@ public class JobSchedulerApplication {
             System.out.printf("   --> Heartbeat pulse executed (Payload: %s)%n", payload);
         });
 
+        // Initialize Persistence Repositories
+        JobRepository jobRepository = null;
+        ExecutionRepository executionRepository = null;
+        RecurrenceRepository recurrenceRepository = null;
+        SchedulerStateRepository schedulerStateRepository = null;
+
+        try {
+            MongoConnectionManager mongoManager = new MongoConnectionManager();
+            MongoDatabase db = mongoManager.getDatabase();
+            jobRepository = new MongoJobRepository(db, taskRegistry);
+            executionRepository = new MongoExecutionRepository(db, jobRepository);
+            recurrenceRepository = new MongoRecurrenceRepository(db, jobRepository);
+            schedulerStateRepository = new MongoSchedulerStateRepository(db);
+            System.out.println("Successfully connected to MongoDB for persistent storage [Database: job_scheduler_db].");
+        } catch (Exception e) {
+            System.err.println("MongoDB unavailable (" + e.getMessage() + "). Operating in in-memory mode.");
+        }
+
         Clock clock = Clock.systemUTC();
         JobExecutor executor = new JobExecutor(3, clock);
-        JobScheduler scheduler = new JobScheduler(clock, executor);
+        JobScheduler scheduler = new JobScheduler(
+                clock,
+                executor,
+                jobRepository,
+                executionRepository,
+                recurrenceRepository,
+                schedulerStateRepository,
+                taskRegistry
+        );
+
+        if (jobRepository != null && executionRepository != null) {
+            scheduler.recoverFromPersistence();
+        }
+
         Instant now = clock.instant();
 
         // Application Services & V8 REST API Server
-        com.siva.jobscheduler.application.JobApplicationService jobAppService = new com.siva.jobscheduler.application.JobApplicationService(scheduler, null, null);
-        com.siva.jobscheduler.application.ExecutionApplicationService execAppService = new com.siva.jobscheduler.application.ExecutionApplicationService(scheduler, null);
-        com.siva.jobscheduler.application.WorkflowApplicationService wfAppService = new com.siva.jobscheduler.application.WorkflowApplicationService(scheduler, null, null);
-        com.siva.jobscheduler.application.SchedulerApplicationService schedAppService = new com.siva.jobscheduler.application.SchedulerApplicationService(scheduler, executor, null, null);
+        com.siva.jobscheduler.application.JobApplicationService jobAppService =
+                new com.siva.jobscheduler.application.JobApplicationService(scheduler, jobRepository, taskRegistry);
+        com.siva.jobscheduler.application.ExecutionApplicationService execAppService =
+                new com.siva.jobscheduler.application.ExecutionApplicationService(scheduler, executionRepository);
+        com.siva.jobscheduler.application.WorkflowApplicationService wfAppService =
+                new com.siva.jobscheduler.application.WorkflowApplicationService(scheduler, jobRepository, scheduler.getDependencyGraph());
+        com.siva.jobscheduler.application.SchedulerApplicationService schedAppService =
+                new com.siva.jobscheduler.application.SchedulerApplicationService(scheduler, executor, jobRepository, executionRepository);
 
         int serverPort = 8080;
         try {

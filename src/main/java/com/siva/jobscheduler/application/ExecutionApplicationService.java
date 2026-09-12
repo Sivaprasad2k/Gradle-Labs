@@ -21,15 +21,22 @@ public class ExecutionApplicationService {
     }
 
     public PageResponse<ExecutionResponse> listExecutions(String statusFilter, String jobIdFilter, int page, int size) {
-        List<JobExecution> allExecutions;
+        List<JobExecution> allExecutions = Collections.emptyList();
         if (executionRepository != null) {
             if (jobIdFilter != null && !jobIdFilter.isBlank()) {
                 allExecutions = executionRepository.findByJobId(jobIdFilter);
             } else {
                 allExecutions = executionRepository.findAll();
             }
-        } else {
-            allExecutions = Collections.emptyList();
+        }
+
+        if (allExecutions.isEmpty()) {
+            allExecutions = scheduler.getAllExecutions();
+            if (jobIdFilter != null && !jobIdFilter.isBlank()) {
+                allExecutions = allExecutions.stream()
+                        .filter(e -> e.getJob() != null && jobIdFilter.equals(e.getJob().id()))
+                        .toList();
+            }
         }
 
         if (statusFilter != null && !statusFilter.isBlank()) {

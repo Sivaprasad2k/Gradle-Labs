@@ -12,6 +12,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -47,6 +48,16 @@ class ApplicationServiceTest {
 
         List<JobResponse> jobs = jobService.listJobs();
         assertNotNull(jobs);
+        assertFalse(jobs.isEmpty(), "listJobs() must not be empty after job creation");
+        assertEquals(1, jobs.size());
+        assertEquals("test-1", jobs.get(0).jobId());
+
+        Optional<JobResponse> fetched = jobService.getJob("test-1");
+        assertTrue(fetched.isPresent(), "getJob('test-1') must return the created job");
+        assertEquals("Test Job 1", fetched.get().jobName());
+
+        SchedulerStatusResponse status = schedulerService.getStatus();
+        assertEquals(1, status.totalJobs(), "totalJobs in status must reflect created job");
     }
 
     @Test

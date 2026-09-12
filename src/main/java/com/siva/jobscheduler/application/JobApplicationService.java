@@ -102,7 +102,13 @@ public class JobApplicationService {
                 return all.stream().map(JobResponse::fromDomain).toList();
             }
         }
-        return Collections.emptyList();
+        Map<String, Job> jobsMap = new LinkedHashMap<>();
+        for (JobExecution exec : scheduler.getAllExecutions()) {
+            if (exec != null && exec.getJob() != null) {
+                jobsMap.putIfAbsent(exec.getJob().id(), exec.getJob());
+            }
+        }
+        return jobsMap.values().stream().map(JobResponse::fromDomain).toList();
     }
 
     public boolean cancelJobExecution(String jobId) {

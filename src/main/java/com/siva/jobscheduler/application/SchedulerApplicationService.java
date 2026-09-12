@@ -1,5 +1,6 @@
 package com.siva.jobscheduler.application;
 
+import com.siva.jobscheduler.domain.Job;
 import com.siva.jobscheduler.domain.JobExecution;
 import com.siva.jobscheduler.domain.JobStatus;
 import com.siva.jobscheduler.domain.SchedulerState;
@@ -32,9 +33,15 @@ public class SchedulerApplicationService {
 
     public SchedulerStatusResponse getStatus() {
         SchedulerState state = scheduler.getSchedulerState();
-        int totalJobs = jobRepository != null ? jobRepository.findAll().size() : 0;
+        
+        List<Job> allJobs = jobRepository != null ? jobRepository.findAll() : List.of();
+        int totalJobs = !allJobs.isEmpty() ? allJobs.size() :
+                (int) scheduler.getAllExecutions().stream().map(e -> e.getJob().id()).distinct().count();
 
         List<JobExecution> allExecutions = executionRepository != null ? executionRepository.findAll() : List.of();
+        if (allExecutions.isEmpty()) {
+            allExecutions = scheduler.getAllExecutions();
+        }
 
         int running = (int) allExecutions.stream().filter(e -> e.getStatus() == JobStatus.RUNNING).count();
         int scheduled = (int) allExecutions.stream().filter(e -> e.getStatus() == JobStatus.SCHEDULED).count();

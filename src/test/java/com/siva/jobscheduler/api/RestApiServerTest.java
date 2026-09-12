@@ -85,13 +85,12 @@ class RestApiServerTest {
     void testCreateJobEndpoint() throws Exception {
         String body = """
                 {
-                  "jobId": "api-job-1",
-                  "jobName": "API Registered Job",
+                  "id": "api-job-1",
+                  "name": "API Registered Job",
                   "taskType": "IN_MEMORY",
-                  "scheduledAt": %d,
                   "failurePolicy": "CONTINUE"
                 }
-                """.formatted(System.currentTimeMillis() + 60000);
+                """;
 
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create("http://localhost:" + port + "/api/v1/jobs"))
@@ -101,7 +100,25 @@ class RestApiServerTest {
 
         HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
         assertEquals(201, resp.statusCode());
-        assertTrue(resp.body().contains("\"jobId\":\"api-job-1\""));
+        assertTrue(resp.body().contains("\"id\":\"api-job-1\"") || resp.body().contains("\"jobId\":\"api-job-1\""));
+
+        // Verify GET /api/v1/jobs returns the created job
+        HttpRequest getJobsReq = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:" + port + "/api/v1/jobs"))
+                .GET()
+                .build();
+        HttpResponse<String> getJobsResp = client.send(getJobsReq, HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, getJobsResp.statusCode());
+        assertTrue(getJobsResp.body().contains("api-job-1"), "GET /api/v1/jobs response must contain created job api-job-1");
+
+        // Verify GET /api/v1/scheduler returns totalJobs >= 1
+        HttpRequest statusReq = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:" + port + "/api/v1/scheduler"))
+                .GET()
+                .build();
+        HttpResponse<String> statusResp = client.send(statusReq, HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, statusResp.statusCode());
+        assertTrue(statusResp.body().contains("\"totalJobs\":1"), "Scheduler status must report totalJobs: 1");
     }
 
     @Test

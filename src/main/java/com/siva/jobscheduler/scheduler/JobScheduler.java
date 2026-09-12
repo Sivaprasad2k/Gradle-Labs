@@ -247,6 +247,25 @@ public class JobScheduler {
         return recurrenceStates.get(jobId);
     }
 
+    public DependencyGraph getDependencyGraph() {
+        return dependencyGraph;
+    }
+
+    public Map<String, JobExecution> getActiveExecutions() {
+        return java.util.Collections.unmodifiableMap(activeExecutions);
+    }
+
+    public Map<String, JobExecution> getExecutionHistory() {
+        return java.util.Collections.unmodifiableMap(executionHistory);
+    }
+
+    public java.util.List<JobExecution> getAllExecutions() {
+        Map<String, JobExecution> combined = new java.util.LinkedHashMap<>();
+        combined.putAll(executionHistory);
+        combined.putAll(activeExecutions);
+        return new java.util.ArrayList<>(combined.values());
+    }
+
     /**
      * Reconstructs runtime scheduling projections (PriorityQueue, DependencyGraph, RecurrenceStates)
      * and recovers interrupted executions from MongoDB.
