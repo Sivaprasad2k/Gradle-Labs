@@ -1,7 +1,7 @@
-# Architecture: Version 6
+# Architecture: Version 7
 
 ## Overview
-The Job Scheduler V6 introduces **recurring jobs, fixed-rate scheduling, and missed-occurrence coalescing**. It decouples recurring job definitions from execution occurrences (`executionId`), introduces `FixedRateRecurrence`, enforces no-overlapping-execution invariants, and isolates retry attempts from recurrence occurrences while preserving V1–V5 DAG dependencies and workflow control policies.
+The Job Scheduler V7 introduces **durable MongoDB persistence, execution history tracking, and restart recovery**. MongoDB functions as the durable single source of truth (`jobs`, `executions`, `recurrence_states`, `scheduler_state`), while in-memory structures (`PriorityQueue`, `DependencyGraph`, `activeExecutions`) function as runtime projections reconstructed during startup.
 
 ## Package Architecture & Component Boundaries
 
@@ -13,16 +13,27 @@ com.siva.jobscheduler/
 │   ├── JobTask.java
 │   ├── JobStatus.java
 │   ├── JobExecution.java
-│   ├── AttemptOutcome.java
 │   ├── ExecutionAttempt.java
-│   ├── FailureType.java
-│   ├── FailureClassifier.java
-│   ├── DefaultFailureClassifier.java
-│   ├── BackoffStrategy.java
-│   ├── ExponentialBackoffStrategy.java
-│   ├── RetryPolicy.java
 │   ├── FailurePolicy.java
 │   └── SchedulerState.java
+│
+├── task/
+│   ├── TaskHandler.java
+│   └── TaskRegistry.java
+│
+├── persistence/
+│   ├── JobRepository.java
+│   ├── ExecutionRepository.java
+│   ├── RecurrenceRepository.java
+│   ├── SchedulerStateRepository.java
+│   ├── MongoConnectionManager.java
+│   ├── mapper/
+│   │   └── DocumentMapper.java
+│   └── mongo/
+│       ├── MongoJobRepository.java
+│       ├── MongoExecutionRepository.java
+│       ├── MongoRecurrenceRepository.java
+│       └── MongoSchedulerStateRepository.java
 │
 ├── recurrence/
 │   ├── RecurrencePolicy.java
@@ -41,27 +52,34 @@ com.siva.jobscheduler/
 └── JobSchedulerApplication.java
 ```
 
-### 1. Domain Layer (`com.siva.jobscheduler.domain`)
-- **`Job`**: Immutable record including optional `RecurrencePolicy`, `dependencyIds`, and `FailurePolicy`.
-- **`JobExecution`**: Manages explicit execution occurrence identity (`executionId = jobId#occurrenceNumber`) and lifecycle transitions.
+### 1. Persistence Layer (`com.siva.jobscheduler.persistence`)
+- **`DocumentMapper`**: Converts domain entities to/from BSON `Document` format.
+- **`MongoConnectionManager`**: Manages `MongoClient` connection lifecycle to local or Atlas MongoDB instances.
+- **`MongoRepositories`**: Implement clean Java interfaces (`JobRepository`, `ExecutionRepository`, `RecurrenceRepository`, `SchedulerStateRepository`).
 
-### 2. Recurrence Layer (`com.siva.jobscheduler.recurrence`)
-- **`RecurrencePolicy`**: Interface defining occurrence eligibility and next scheduled time calculations.
-- **`FixedRateRecurrence`**: Concrete record implementing fixed-rate calculations and missed-occurrence coalescing.
-- **`RecurrenceState`**: Tracks occurrence count, last scheduled time, and schedule cancellation status per job.
+### 2. Task Layer (`com.siva.jobscheduler.task`)
+- **`TaskRegistry`**: Resolves persistent `taskType` String identifiers to executable `TaskHandler` lambdas upon JVM restart.
 
-### 3. Scheduler Layer (`com.siva.jobscheduler.scheduler`)
-- **`JobScheduler`**: Core scheduling engine managing PriorityQueue, DependencyGraph, RecurrenceStates, and execution history.
-  - Generates next recurrence occurrence upon completion of current execution.
-  - Enforces no-overlapping-execution invariant (at most 1 active execution per job).
-  - Supports schedule cancellation (`cancelRecurrence`).
-
-## Recurrence & Execution Hierarchy
+### 3. Startup Recovery Flow
 
 ```text
-Job (Definition)
-  └── RecurrencePolicy (e.g. FixedRateRecurrence: interval = 1m)
-        ├── JobExecution #1 (executionId: job-1#1, occurrence: 1)
-        ├── JobExecution #2 (executionId: job-1#2, occurrence: 2)
-        └── JobExecution #3 (executionId: job-1#3, occurrence: 3)
+JVM Restart
+     │
+     ▼
+Load SchedulerState (HALTED -> Stay HALTED)
+     │
+     ▼
+Load Durable Jobs & Build TaskHandlers
+     │
+     ▼
+Populate DependencyGraph & Validate DAG
+     │
+     ▼
+Recover RUNNING Executions -> FAILED (InterruptedWorkerException)
+     │
+     ▼
+Reconstruct RecurrenceStates & Coalesce Overdue Schedules
+     │
+     ▼
+Rebuild PriorityQueue & Start Dispatch Loop
 ```

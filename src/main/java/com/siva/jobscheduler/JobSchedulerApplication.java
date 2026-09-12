@@ -4,11 +4,14 @@ import com.siva.jobscheduler.domain.*;
 import com.siva.jobscheduler.execution.JobExecutor;
 import com.siva.jobscheduler.recurrence.FixedRateRecurrence;
 import com.siva.jobscheduler.scheduler.JobScheduler;
+import com.siva.jobscheduler.task.TaskRegistry;
 
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -20,31 +23,31 @@ public class JobSchedulerApplication {
         }
     }
 
-    static class InvalidDataException extends RuntimeException {
-        public InvalidDataException(String message) {
-            super(message);
-        }
-    }
-
     public static void main(String[] args) {
         System.out.println("==================================================");
-        System.out.println(" Java Job Scheduler - Version 6");
-        System.out.println(" Recurring Jobs & Fixed-Rate Scheduling");
+        System.out.println(" Java Job Scheduler - Version 7");
+        System.out.println(" Persistence, Execution History & Restart Recovery");
         System.out.println("==================================================\n");
+
+        // Register Task Types in TaskRegistry for Task Persistence
+        TaskRegistry taskRegistry = TaskRegistry.getInstance();
+        taskRegistry.registerHandler("HEARTBEAT", (type, payload) -> {
+            System.out.printf("   --> Heartbeat pulse executed (Payload: %s)%n", payload);
+        });
 
         Clock clock = Clock.systemUTC();
         JobExecutor executor = new JobExecutor(3, clock);
         JobScheduler scheduler = new JobScheduler(clock, executor);
         Instant now = clock.instant();
 
-        // 1. Recurring Job R1: Executes 3 times at 50ms intervals
+        // 1. Persistent Recurring Job R1
         AtomicInteger recurringCount = new AtomicInteger(0);
         FixedRateRecurrence recurrencePolicy = new FixedRateRecurrence(Duration.ofMillis(50), 3);
         Job jobR1 = new Job("R1", "recurring-heartbeat", now, () -> {
             int current = recurringCount.incrementAndGet();
             simulateWork(20);
             System.out.printf("   --> Heartbeat pulse #%d executed%n", current);
-        }, recurrencePolicy);
+        }, "HEARTBEAT", Map.of("pulseInterval", "50ms"), Collections.emptySet(), FailurePolicy.CONTINUE, recurrencePolicy);
 
         // 2. Dependency Chain: A -> B
         AtomicInteger jobAAttempts = new AtomicInteger(0);
@@ -62,12 +65,12 @@ public class JobSchedulerApplication {
 
         Job jobB = new Job("B", "job-b-step2", now, () -> simulateWork(20), Set.of("A"));
 
-        System.out.println("Registering jobs...");
+        System.out.println("Registering jobs with persistent TaskType definitions...");
         JobExecution execR1 = scheduler.registerJob(jobR1);
         JobExecution execA = scheduler.registerJob(jobA, retryPolicy);
         JobExecution execB = scheduler.registerJob(jobB);
 
-        System.out.println("Registered Job R1 (Recurring): " + jobR1.name() + " [Policy: 3 occurrences @ 50ms]");
+        System.out.println("Registered Job R1 (Persistent Recurring): " + jobR1.name() + " [Type: " + jobR1.taskType() + "]");
         System.out.println("Registered Job A (Workflow Prereq): " + jobA.name() + " [Initial: " + execA.getStatus() + "]");
         System.out.println("Registered Job B (Dependent): " + jobB.name() + " [Initial: " + execB.getStatus() + ", Depends: A]");
         System.out.println();
