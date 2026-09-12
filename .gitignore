@@ -2,3 +2,8 @@
 build/
 bin/
 *.class
+.idea/
+*.iml
+.vscode/
+*.log
+logs/

@@ -1,36 +1,105 @@
 package com.siva.jobscheduler;
 
-import com.siva.jobscheduler.domain.Job;
+import com.siva.jobscheduler.domain.*;
+import com.siva.jobscheduler.execution.JobExecutor;
 import com.siva.jobscheduler.scheduler.JobScheduler;
+
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class JobSchedulerApplication {
+
+    static class NetworkTimeoutException extends RuntimeException {
+        public NetworkTimeoutException(String message) {
+            super(message);
+        }
+    }
+
+    static class InvalidDataException extends RuntimeException {
+        public InvalidDataException(String message) {
+            super(message);
+        }
+    }
+
     public static void main(String[] args) {
+        System.out.println("==================================================");
+        System.out.println(" Java Job Scheduler - Version 4");
+        System.out.println(" Controlled Failure Recovery & Retry Engine");
+        System.out.println("==================================================\n");
+
         Clock clock = Clock.systemUTC();
-        JobScheduler scheduler = new JobScheduler(clock);
+        JobExecutor executor = new JobExecutor(3, clock);
+        JobScheduler scheduler = new JobScheduler(clock, executor);
         Instant now = clock.instant();
 
-        Job job1 = new Job("1", "job-001", now.plus(1, ChronoUnit.SECONDS), () -> {
-            // Simulating short work
-        });
-        Job job2 = new Job("2", "job-002", now, () -> {
-            // Simulating short work
-        });
-        Job job3 = new Job("3", "job-003", now.plus(2, ChronoUnit.SECONDS), () -> {
-            // Simulating short work
+        // Failure Classifier: NetworkTimeoutException is TRANSIENT, InvalidDataException is PERMANENT
+        FailureClassifier classifier = new DefaultFailureClassifier(Set.of(NetworkTimeoutException.class));
+        BackoffStrategy backoff = new ExponentialBackoffStrategy(Duration.ofMillis(100), Duration.ofMillis(500));
+        RetryPolicy retryPolicy = new RetryPolicy(3, classifier, backoff);
+
+        // Job A: Succeeds immediately
+        Job jobA = new Job("1", "job-a-immediate-success", now, () -> simulateWork(50));
+
+        // Job B: Fails transiently on Attempts 1 & 2, succeeds on Attempt 3
+        AtomicInteger jobBAttempts = new AtomicInteger(0);
+        Job jobB = new Job("2", "job-b-transient-retry", now, () -> {
+            int attempt = jobBAttempts.incrementAndGet();
+            simulateWork(50);
+            if (attempt < 3) {
+                throw new NetworkTimeoutException("Connection timed out on attempt " + attempt);
+            }
         });
 
-        System.out.println("Registered job: " + job1.name());
-        System.out.println("Registered job: " + job2.name());
-        System.out.println("Registered job: " + job3.name());
+        // Job C: Fails permanently on Attempt 1
+        Job jobC = new Job("3", "job-c-permanent-failure", now, () -> {
+            simulateWork(50);
+            throw new InvalidDataException("Unrecoverable data validation error");
+        });
+
+        System.out.println("Registering jobs...");
+        JobExecution execA = scheduler.registerJob(jobA, RetryPolicy.noRetry());
+        System.out.println("Registered job: " + jobA.name() + " [Policy: noRetry]");
+
+        JobExecution execB = scheduler.registerJob(jobB, retryPolicy);
+        System.out.println("Registered job: " + jobB.name() + " [Policy: maxAttempts=3, transient=NetworkTimeoutException]");
+
+        JobExecution execC = scheduler.registerJob(jobC, retryPolicy);
+        System.out.println("Registered job: " + jobC.name() + " [Policy: maxAttempts=3, permanent=InvalidDataException]");
         System.out.println();
 
-        scheduler.registerJob(job1);
-        scheduler.registerJob(job2);
-        scheduler.registerJob(job3);
-
+        // Start scheduler loop
         scheduler.start();
+
+        // Display Execution Summary
+        List<JobExecution> executions = List.of(execA, execB, execC);
+        long completedCount = executions.stream().filter(e -> e.getStatus() == JobStatus.COMPLETED).count();
+        long failedCount = executions.stream().filter(e -> e.getStatus() == JobStatus.FAILED).count();
+
+        System.out.println("\n==================================================");
+        System.out.println(" Execution Summary");
+        System.out.println("==================================================");
+        for (JobExecution exec : executions) {
+            String details = String.format("Attempts: %d | Status: %-10s", exec.getAttemptCount(), exec.getStatus());
+            if (exec.getStatus() == JobStatus.FAILED && exec.getFailure() != null) {
+                details += " (Reason: " + exec.getFailure().getMessage() + ")";
+            }
+            System.out.printf("%-25s %s%n", exec.getJob().name(), details);
+        }
+        System.out.println("--------------------------------------------------");
+        System.out.printf("Completed : %d%n", completedCount);
+        System.out.printf("Failed    : %d%n", failedCount);
+        System.out.println("==================================================");
+    }
+
+    private static void simulateWork(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 }
